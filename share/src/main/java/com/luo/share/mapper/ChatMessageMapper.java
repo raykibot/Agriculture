@@ -21,4 +21,11 @@ public interface ChatMessageMapper {
     List<ChatMessage> selectHistory(@Param("userId1") Long userId1,
                                     @Param("userId2") Long userId2);
 
+    /**
+     * 将某个用户发给我的所有未读消息标记为已读
+     * @param fromUserId 发送方 (对方的ID)
+     * @param toUserId   接收方 (我自己的ID)
+     */
+    void updateUnreadToRead(@Param("fromUserId") Long fromUserId, @Param("toUserId") Long toUserId);
+
 }

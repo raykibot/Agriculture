@@ -1,6 +1,7 @@
 package com.luo.share.websocket;
 
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.luo.share.mapper.ChatMessageMapper;
 import com.luo.share.model.entity.ChatMessage;
@@ -12,16 +13,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
-// 客户端连接的 URL 格式: ws://localhost:9191/ws/chat/{userId}
 @ServerEndpoint("/ws/chat/{userId}")
 public class ChatWebSocketServer {
 
-    // 解决 WebSocket 无法直接注入 Mapper 的天坑
     private static ChatMessageMapper chatMessageMapper;
 
     @Autowired
@@ -29,70 +29,83 @@ public class ChatWebSocketServer {
         ChatWebSocketServer.chatMessageMapper = mapper;
     }
 
-    // 存放所有在线用户的 WebSocket Session
-    // 必须使用 ConcurrentHashMap 保证多线程并发安全！
     private static final Map<Long, Session> ONLINE_SESSIONS = new ConcurrentHashMap<>();
-
-    // 用于 JSON 和 Java 对象相互转换
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    /**
-     * 1. 建立连接时触发 (用户上线)
-     */
     @OnOpen
     public void onOpen(Session session, @PathParam("userId") Long userId) {
         ONLINE_SESSIONS.put(userId, session);
         log.info("用户上线: ID={}, 当前在线人数: {}", userId, ONLINE_SESSIONS.size());
     }
 
-    /**
-     * 2. 收到客户端消息时触发 (转发并存库)
-     */
     @OnMessage
     public void onMessage(String message, Session session, @PathParam("userId") Long userId) {
-        log.info("收到用户 ID={} 的消息: {}", userId, message);
         try {
-            // 解析前端传来的 JSON 字符串为对象
-            // 假设前端传的格式为: {"toUserId": 2, "content": "老板，这台拖拉机能便宜点吗？"}
-            ChatMessage chatMessage = objectMapper.readValue(message, ChatMessage.class);
-            chatMessage.setFromUserId(userId);
-            chatMessage.setIsRead(0); // 默认未读
+            // 1. 将前端传来的 JSON 字符串解析为树形节点
+            JsonNode jsonNode = objectMapper.readTree(message);
 
-            chatMessage.setId(IdWorker.getId());
+            // 2. 提取公共字段
+            int type = jsonNode.has("type") ? jsonNode.get("type").asInt() : 1; // 默认为 1 (聊天消息)
+            Long toUserId = jsonNode.get("toUserId").asLong();
 
-            // 存入数据库 (持久化)
-            chatMessageMapper.insertMessage(chatMessage);
+            // 3. 业务分发
+            if (type == 1) {
+                // 【情况 A】这是正常的聊天消息
+                log.info("收到用户 ID={} 的聊天消息, 发给 ID={}", userId, toUserId);
 
-            // 核心逻辑：转发给目标用户
-            Session targetSession = ONLINE_SESSIONS.get(chatMessage.getToUserId());
-            if (targetSession != null && targetSession.isOpen()) {
-                // 对方在线，直接把 JSON 消息推过去
-                String jsonMessage = objectMapper.writeValueAsString(chatMessage);
-                targetSession.getBasicRemote().sendText(jsonMessage);
-            } else {
-                // 对方不在线，消息已经存入数据库了，对方下次上线时去查历史记录即可
-                log.info("用户 ID={} 不在线，消息已转为离线存储", chatMessage.getToUserId());
+                ChatMessage chatMessage = new ChatMessage();
+                chatMessage.setId(IdWorker.getId()); // 雪花算法生成 ID
+                chatMessage.setFromUserId(userId);
+                chatMessage.setToUserId(toUserId);
+                chatMessage.setContent(jsonNode.get("content").asText());
+                chatMessage.setIsRead(0); // 默认未读
+
+                // 存入数据库
+                chatMessageMapper.insertMessage(chatMessage);
+
+                // 转发给目标用户
+                Session targetSession = ONLINE_SESSIONS.get(toUserId);
+                if (targetSession != null && targetSession.isOpen()) {
+                    // 为了让前端方便处理，我们给发出去的 JSON 也带上 type = 1
+                    Map<String, Object> pushMsg = new HashMap<>();
+                    pushMsg.put("type", 1);
+                    pushMsg.put("id", chatMessage.getId());
+                    pushMsg.put("fromUserId", chatMessage.getFromUserId());
+                    pushMsg.put("content", chatMessage.getContent());
+                    targetSession.getBasicRemote().sendText(objectMapper.writeValueAsString(pushMsg));
+                }
+            }
+            else if (type == 2) {
+                // 【情况 B】这是“已读回执”信号
+                log.info("收到用户 ID={} 的已读回执, 通知 ID={}", userId, toUserId);
+
+                Session targetSession = ONLINE_SESSIONS.get(toUserId);
+                if (targetSession != null && targetSession.isOpen()) {
+                    // 直接转发给对方，不需要存数据库
+                    Map<String, Object> receiptMsg = new HashMap<>();
+                    receiptMsg.put("type", 2);
+                    receiptMsg.put("fromUserId", userId); // 告诉对方，是我(userId)读了你的消息
+                    targetSession.getBasicRemote().sendText(objectMapper.writeValueAsString(receiptMsg));
+                }
             }
         } catch (Exception e) {
-            log.error("处理消息失败", e);
+            log.error("WebSocket 处理消息失败", e);
         }
     }
 
-    /**
-     * 3. 连接关闭时触发 (用户下线)
-     */
     @OnClose
     public void onClose(@PathParam("userId") Long userId) {
         ONLINE_SESSIONS.remove(userId);
         log.info("用户下线: ID={}, 当前在线人数: {}", userId, ONLINE_SESSIONS.size());
     }
 
-    /**
-     * 4. 发生错误时触发
-     */
     @OnError
     public void onError(Session session, Throwable error) {
         log.error("WebSocket 发生错误", error);
+    }
+
+    public static boolean isOnline(Long userId) {
+        return ONLINE_SESSIONS.containsKey(userId);
     }
 
     /**

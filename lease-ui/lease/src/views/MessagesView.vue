@@ -1,72 +1,216 @@
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { getChatHistoryAPI, getBatchOnlineStatusAPI, markAsReadAPI } from '@/api/user' 
 
-// 模拟当前登录用户
-const currentUser = { id: 'u1', name: '我', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix' }
+const router = useRouter()
 
-// 模拟联系人列表 (增加数据量以展示滚动效果)
-const contacts = ref([
-  { id: 'c1', name: '王师傅', role: '农机主', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Toby', machine: '东方红 LX2204 拖拉机', lastMessage: '明天早上8点可以把车送过去。', time: '10:30', unread: 2 },
-  { id: 'c2', name: '李老板', role: '租赁公司', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Max', machine: '大疆 T60 植保无人机', lastMessage: '押金已经收到，谢谢合作！', time: '昨天', unread: 0 },
-  { id: 'c3', name: '张村长', role: '农户', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Leo', machine: '久保田 PRO1408 收割机', lastMessage: '这个机型带自动驾驶吗？', time: '星期二', unread: 0 },
-  { id: 'c4', name: '赵大爷', role: '农户', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Jack', machine: '雷沃谷神联合收割机', lastMessage: '收割机刀片有点磨损，能换新的吗？', time: '星期一', unread: 1 },
-  { id: 'c5', name: '农机服务中心-小刘', role: '平台客服', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Mia', machine: '', lastMessage: '您的实名认证已经通过。', time: '上周', unread: 0 },
-  { id: 'c6', name: '陈哥', role: '农机主', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Oscar', machine: '极飞 V50 农业无人车', lastMessage: '好的，按您说的时间来。', time: '上周', unread: 0 },
-  { id: 'c7', name: '顺丰农机物流', role: '承运方', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Buster', machine: '', lastMessage: '设备预计今天下午送达指定农田。', time: '上周', unread: 0 },
-  { id: 'c8', name: '周大姐', role: '农户', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Lola', machine: '约翰迪尔 8R 拖拉机', lastMessage: '租金可以用微信支付吗？', time: '3月12日', unread: 0 }
-])
+const currentUser = ref({ userId: null, username: '未登录', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Me' })
+let ws = null 
+let statusTimer = null 
+
+// 模拟全站用户字典
+const allUsers = [
+  { id: 1, name: '农民大叔 (用户1)', role: '农户', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix', lastMessage: '', time: '', unread: 0, isOnline: false },
+  { id: 2, name: '农机主老板 (用户2)', role: '农机主', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Toby', lastMessage: '', time: '', unread: 0, isOnline: false }
+]
+
+const contacts = ref([])
+const activeContact = ref(null)
 
 const searchQuery = ref('')
+const chatHistories = ref({}) 
+const inputText = ref('')
+const chatBoxRef = ref(null)
 
-// 计算属性：实现左侧联系人搜索过滤
+// ================= 核心 1：拉取历史记录 =================
+const fetchChatHistory = async (targetUserId) => {
+  try {
+    const res = await getChatHistoryAPI(currentUser.value.userId, targetUserId)
+    
+    chatHistories.value[targetUserId] = res.data.map(msg => {
+      const timeStr = new Date(msg.createTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return {
+        id: msg.id,
+        senderId: msg.fromUserId,
+        text: msg.content,
+        time: timeStr,
+        isRead: msg.isRead 
+      }
+    })
+    scrollToBottom()
+  } catch (error) {
+    console.error('拉取历史记录失败:', error)
+  }
+}
+
+// ================= 核心 2：批量获取在线状态 =================
+const fetchOnlineStatus = async () => {
+  if (contacts.value.length === 0) return
+  try {
+    const userIds = contacts.value.map(c => c.id)
+    const res = await getBatchOnlineStatusAPI(userIds)
+    const statusMap = res.data
+    
+    contacts.value.forEach(contact => {
+      contact.isOnline = statusMap[contact.id] || false
+    })
+  } catch (error) {
+    console.error('获取在线状态失败:', error)
+  }
+}
+
+// ================= 核心 3：标记消息为已读 (附带回执机制) =================
+const markMessagesAsRead = async (targetUserId) => {
+  try {
+    // 1. HTTP 告诉后端数据库修改状态
+    await markAsReadAPI(targetUserId, currentUser.value.userId)
+    
+    // 2. 清空本地小红点
+    const contact = contacts.value.find(c => c.id === targetUserId)
+    if (contact) contact.unread = 0
+
+    // 3. 【新增】：通过 WebSocket 悄悄给对方发一条“已读回执信号”
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 2, // 2 代表回执信号
+        toUserId: targetUserId
+      }))
+    }
+  } catch (error) {
+    console.error('标记已读失败:', error)
+  }
+}
+
+// ================= WebSocket 逻辑 =================
+const initWebSocket = () => {
+  const userInfoStr = localStorage.getItem('user_info')
+  if (!userInfoStr) {
+    alert('请先登录！')
+    router.push('/login')
+    return
+  }
+  
+  const userInfo = JSON.parse(userInfoStr)
+  currentUser.value.userId = userInfo.userId
+  currentUser.value.username = userInfo.username
+  
+  contacts.value = allUsers.filter(u => u.id !== currentUser.value.userId)
+  
+  if (contacts.value.length > 0) {
+    activeContact.value = contacts.value[0]
+    fetchChatHistory(activeContact.value.id) 
+    markMessagesAsRead(activeContact.value.id) 
+  }
+
+  fetchOnlineStatus()
+  statusTimer = setInterval(() => {
+    fetchOnlineStatus()
+  }, 10000)
+
+  const wsUrl = `ws://localhost:9191/ws/chat/${currentUser.value.userId}`
+  ws = new WebSocket(wsUrl)
+
+  ws.onmessage = (event) => {
+    const msgObj = JSON.parse(event.data)
+    
+    // 【核心改造】：判断收到的是聊天消息，还是已读回执
+    if (msgObj.type === 2) {
+      // 收到了已读回执 (代表对方 msgObj.fromUserId 看了我发的消息)
+      const readerId = msgObj.fromUserId;
+      // 把我发给 readerId 的所有消息在本地强行置为“已读” (绿色)
+      if (chatHistories.value[readerId]) {
+        chatHistories.value[readerId].forEach(msg => {
+          if (msg.senderId === currentUser.value.userId) {
+            msg.isRead = 1;
+          }
+        })
+      }
+      return; // 回执处理完毕，直接结束
+    }
+
+    // ========== 下面是原本处理正常聊天消息 (type = 1) 的逻辑 ==========
+    const senderId = msgObj.fromUserId
+
+    if (!chatHistories.value[senderId]) {
+      chatHistories.value[senderId] = []
+    }
+    
+    chatHistories.value[senderId].push({
+      id: msgObj.id || Date.now(),
+      senderId: senderId,
+      text: msgObj.content,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      isRead: 0 
+    })
+
+    const contact = contacts.value.find(c => c.id === senderId)
+    if (contact) {
+      contact.lastMessage = msgObj.content
+      contact.time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      
+      if (activeContact.value?.id === senderId) {
+        // 如果正在看这个人聊天，直接静默发已读请求（里面包含了发出回执信号）
+        markMessagesAsRead(senderId)
+      } else {
+        contact.unread += 1
+      }
+    }
+    
+    scrollToBottom()
+  }
+}
+
+onMounted(() => {
+  initWebSocket()
+})
+
+onUnmounted(() => {
+  if (ws) ws.close() 
+  if (statusTimer) clearInterval(statusTimer) 
+})
+
+// ================= 交互逻辑 =================
 const filteredContacts = computed(() => {
   if (!searchQuery.value) return contacts.value
   return contacts.value.filter(c => c.name.includes(searchQuery.value) || c.role.includes(searchQuery.value))
 })
 
-// 选中的联系人，默认选中第一个
-const activeContact = ref(contacts.value[0])
-
-// 模拟聊天记录数据
-const chatHistories = ref({
-  'c1': [
-    { id: 1, senderId: 'u1', text: '王师傅您好，请问东方红拖拉机这周末有空档吗？我想租两天。', time: '10:15' },
-    { id: 2, senderId: 'c1', text: '有的，周末刚好闲置。您在哪个村？', time: '10:20' },
-    { id: 3, senderId: 'u1', text: '在李家屯南边的麦田，大概50亩地。', time: '10:22' },
-    { id: 4, senderId: 'c1', text: '好的，距离不远。明天早上8点可以把车送过去。', time: '10:30' }
-  ],
-  'c2': [
-    { id: 1, senderId: 'u1', text: '无人机我已经按时归还了。', time: '昨天 14:00' },
-    { id: 2, senderId: 'c2', text: '好的，设备检查无误。', time: '昨天 14:30' },
-    { id: 3, senderId: 'c2', text: '押金已经收到，谢谢合作！', time: '昨天 14:35' }
-  ]
-})
-
-const inputText = ref('')
-const chatBoxRef = ref(null)
-
-// 切换联系人
-const selectContact = (contact) => {
+const selectContact = async (contact) => {
   activeContact.value = contact
-  contact.unread = 0 
-  scrollToBottom()
+  await fetchChatHistory(contact.id)
+  await markMessagesAsRead(contact.id)
 }
 
-// 发送消息
 const sendMessage = () => {
   if (!inputText.value.trim()) return
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    alert('网络未连接，请刷新页面重试')
+    return
+  }
+
+  const targetUserId = activeContact.value.id
+  
+  // 发送时指定 type = 1
+  const payload = {
+    type: 1, 
+    toUserId: targetUserId,
+    content: inputText.value
+  }
+  ws.send(JSON.stringify(payload))
 
   const newMessage = {
     id: Date.now(),
-    senderId: currentUser.id,
+    senderId: currentUser.value.userId,
     text: inputText.value,
-    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    isRead: 0 
   }
 
-  if (!chatHistories.value[activeContact.value.id]) {
-    chatHistories.value[activeContact.value.id] = []
+  if (!chatHistories.value[targetUserId]) {
+    chatHistories.value[targetUserId] = []
   }
-  chatHistories.value[activeContact.value.id].push(newMessage)
+  chatHistories.value[targetUserId].push(newMessage)
   
   activeContact.value.lastMessage = inputText.value
   activeContact.value.time = newMessage.time
@@ -75,7 +219,6 @@ const sendMessage = () => {
   scrollToBottom()
 }
 
-// 滚动到底部
 const scrollToBottom = async () => {
   await nextTick()
   if (chatBoxRef.value) {
@@ -91,13 +234,9 @@ const scrollToBottom = async () => {
       <aside class="sidebar">
         <div class="sidebar-header">
           <div class="header-top">
-            <h2>消息中心</h2>
-            <button class="btn-icon">➕</button>
+            <h2>消息中心 (我是: {{ currentUser.username }})</h2>
           </div>
           <div class="search-bar">
-            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
             <input type="text" v-model="searchQuery" placeholder="搜索联系人..." />
           </div>
         </div>
@@ -112,6 +251,7 @@ const scrollToBottom = async () => {
             <div class="avatar-box">
               <img :src="contact.avatar" :alt="contact.name" />
               <span v-if="contact.unread > 0" class="badge">{{ contact.unread }}</span>
+              <span :class="['avatar-status', { 'offline': !contact.isOnline }]"></span>
             </div>
             <div class="contact-info">
               <div class="contact-top">
@@ -120,9 +260,8 @@ const scrollToBottom = async () => {
               </div>
               <div class="contact-bottom">
                 <span class="role-tag" v-if="contact.role === '农户'">农</span>
-                <span class="role-tag blue" v-else-if="contact.role === '农机主'">主</span>
-                <span class="role-tag green" v-else>企</span>
-                <p class="last-msg">{{ contact.lastMessage }}</p>
+                <span class="role-tag blue" v-else>主</span>
+                <p class="last-msg">{{ contact.lastMessage || '暂无消息' }}</p>
               </div>
             </div>
           </div>
@@ -133,12 +272,8 @@ const scrollToBottom = async () => {
         <header class="chat-header">
           <div class="chat-title">
             <h3>{{ activeContact.name }}</h3>
-            <span class="status-dot"></span>
-            <span class="status-text">在线</span>
-          </div>
-          <div class="machine-ref" v-if="activeContact.machine">
-            <span class="icon">🚜</span> {{ activeContact.machine }}
-            <button class="btn-view">查看订单</button>
+            <span :class="['status-dot', { 'offline': !activeContact.isOnline }]"></span>
+            <span class="status-text">{{ activeContact.isOnline ? '在线' : '离线' }}</span>
           </div>
         </header>
 
@@ -148,26 +283,26 @@ const scrollToBottom = async () => {
           <div 
             v-for="msg in chatHistories[activeContact.id] || []" 
             :key="msg.id"
-            :class="['message-row', msg.senderId === currentUser.id ? 'mine' : 'theirs']"
+            :class="['message-row', msg.senderId === currentUser.userId ? 'mine' : 'theirs']"
           >
-            <img v-if="msg.senderId !== currentUser.id" :src="activeContact.avatar" class="msg-avatar" />
+            <img v-if="msg.senderId !== currentUser.userId" :src="activeContact.avatar" class="msg-avatar" />
             
             <div class="msg-content">
               <div class="bubble">{{ msg.text }}</div>
-              <div class="msg-time">{{ msg.time }}</div>
+              <div class="msg-time">
+                {{ msg.time }}
+                <span v-if="msg.senderId === currentUser.userId" 
+                      :class="['read-status', msg.isRead === 1 ? 'is-read' : 'un-read']">
+                  {{ msg.isRead === 1 ? '已读' : '未读' }}
+                </span>
+              </div>
             </div>
             
-            <img v-if="msg.senderId === currentUser.id" :src="currentUser.avatar" class="msg-avatar" />
+            <img v-if="msg.senderId === currentUser.userId" :src="currentUser.avatar" class="msg-avatar" />
           </div>
         </div>
 
         <div class="chat-input-area">
-          <div class="input-toolbar">
-            <button class="tool-btn" title="表情">😊</button>
-            <button class="tool-btn" title="发送图片">🖼️</button>
-            <button class="tool-btn" title="发送文件">📎</button>
-            <button class="tool-btn" title="常用语">💬</button>
-          </div>
           <textarea 
             v-model="inputText" 
             placeholder="输入消息..."
@@ -192,170 +327,70 @@ const scrollToBottom = async () => {
 </template>
 
 <style scoped>
-/* ================= 全屏布局 ================= */
-.messages-page-full {
-  /* 高度为屏幕高度减去导航栏80px */
-  height: calc(100vh - 80px);
-  width: 100%;
-  background-color: #ffffff;
-  overflow: hidden; /* 防止出现外部滚动条 */
-}
+/* 离线状态变红/变灰 */
+.status-dot.offline { background-color: #ef4444; }
+.avatar-status { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; background-color: #10b981; }
+.avatar-status.offline { background-color: #9ca3af; }
 
-.chat-container-full {
-  display: flex;
-  width: 100%;
-  height: 100%;
-}
+/* 已读/未读状态样式 */
+.read-status { margin-left: 8px; font-weight: 600; font-size: 0.7rem; }
+.is-read { color: #10b981; } /* 绿色已读 */
+.un-read { color: #ef4444; } /* 红色未读 */
 
-/* ================= 自定义滚动条样式 ================= */
+/* 全量 CSS */
+.messages-page-full { height: calc(100vh - 80px); width: 100%; background-color: #ffffff; overflow: hidden; }
+.chat-container-full { display: flex; width: 100%; height: 100%; }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-
-/* ================= 左侧侧边栏 ================= */
-.sidebar {
-  width: 300px; /* 固定宽度 */
-  background-color: #fafafa;
-  border-right: 1px solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  flex-shrink: 0;
-}
-
-.sidebar-header {
-  padding: 15px 20px;
-  background-color: #f3f4f6;
-  border-bottom: 1px solid #e5e7eb;
-}
+.sidebar { width: 300px; background-color: #fafafa; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; height: 100%; flex-shrink: 0; }
+.sidebar-header { padding: 15px 20px; background-color: #f3f4f6; border-bottom: 1px solid #e5e7eb; }
 .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-.header-top h2 { font-size: 1.2rem; font-weight: 700; color: var(--text-dark); margin: 0; }
-.btn-icon { background: transparent; border: none; cursor: pointer; font-size: 1.1rem; filter: grayscale(1); }
-.btn-icon:hover { filter: grayscale(0); }
-
+.header-top h2 { font-size: 1.1rem; font-weight: 700; color: var(--text-dark); margin: 0; }
 .search-bar { position: relative; width: 100%; }
-.search-bar .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: #9ca3af; }
-.search-bar input { width: 100%; padding: 8px 10px 8px 32px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; outline: none; background: white; transition: border-color 0.2s; }
+.search-bar input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.9rem; outline: none; background: white; transition: border-color 0.2s; }
 .search-bar input:focus { border-color: var(--primary-color); }
-
-.contact-list {
-  flex: 1; /* 占据剩余所有高度 */
-  overflow-y: auto; /* 核心：超出范围自动滚动 */
-}
-
-.contact-item {
-  display: flex;
-  padding: 15px 20px;
-  cursor: pointer;
-  border-bottom: 1px solid #f3f4f6;
-  transition: background-color 0.2s;
-}
+.contact-list { flex: 1; overflow-y: auto; }
+.contact-item { display: flex; padding: 15px 20px; cursor: pointer; border-bottom: 1px solid #f3f4f6; transition: background-color 0.2s; }
 .contact-item:hover { background-color: #f3f4f6; }
 .contact-item.active { background-color: #eef2ff; border-left: 4px solid var(--primary-color); padding-left: 16px; }
-
 .avatar-box { position: relative; width: 44px; height: 44px; border-radius: 50%; margin-right: 12px; flex-shrink: 0; }
 .avatar-box img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
-.badge { position: absolute; top: -2px; right: -2px; background-color: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid white; }
-
+.badge { position: absolute; top: -2px; left: -2px; background-color: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid white; z-index: 10; }
 .contact-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 .contact-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
 .contact-top .name { font-weight: 600; color: var(--text-dark); font-size: 1rem; }
 .contact-top .time { font-size: 0.75rem; color: #9ca3af; }
 .contact-bottom { display: flex; align-items: center; gap: 6px; }
-
 .role-tag { font-size: 0.65rem; padding: 2px 4px; border-radius: 4px; color: white; background: #f59e0b; flex-shrink: 0; }
 .role-tag.blue { background: var(--primary-color); }
-.role-tag.green { background: #10b981; }
-
 .last-msg { color: #6b7280; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; }
-
-/* ================= 右侧主聊天区 ================= */
-.chat-main {
-  flex: 1; /* 占据剩余所有宽度 */
-  display: flex;
-  flex-direction: column;
-  background-color: #f8fafc; /* 非常浅的蓝灰色背景 */
-  height: 100%;
-}
-
-.chat-header {
-  padding: 15px 25px;
-  background: white;
-  border-bottom: 1px solid #e5e7eb;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  height: 65px; /* 固定头部高度 */
-  flex-shrink: 0;
-}
+.chat-main { flex: 1; display: flex; flex-direction: column; background-color: #f8fafc; height: 100%; }
+.chat-header { padding: 15px 25px; background: white; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; height: 65px; flex-shrink: 0; }
 .chat-title { display: flex; align-items: center; gap: 8px; }
 .chat-title h3 { font-size: 1.1rem; font-weight: 700; color: var(--text-dark); margin: 0; }
-.status-dot { width: 8px; height: 8px; background-color: #10b981; border-radius: 50%; }
+.status-dot { width: 8px; height: 8px; background-color: #10b981; border-radius: 50%; transition: 0.3s; }
 .status-text { font-size: 0.85rem; color: #10b981; }
-
-.machine-ref { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-medium); background: #f3f4f6; padding: 6px 12px; border-radius: 6px; }
-.btn-view { background: transparent; border: none; color: var(--primary-color); cursor: pointer; font-weight: 600; font-size: 0.85rem; }
-
-/* 聊天历史滚动区 */
-.chat-history {
-  flex: 1; /* 占据中间所有可用高度 */
-  padding: 25px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
+.status-text.offline { color: #ef4444; }
+.chat-history { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
 .date-divider { text-align: center; font-size: 0.8rem; color: #9ca3af; margin: 10px 0; }
-
 .message-row { display: flex; align-items: flex-start; gap: 12px; }
 .message-row.mine { justify-content: flex-end; }
-
 .msg-avatar { width: 36px; height: 36px; border-radius: 50%; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-
 .msg-content { max-width: 60%; display: flex; flex-direction: column; }
 .mine .msg-content { align-items: flex-end; }
 .theirs .msg-content { align-items: flex-start; }
-
 .bubble { padding: 10px 15px; border-radius: 12px; font-size: 0.95rem; line-height: 1.5; box-shadow: 0 1px 2px rgba(0,0,0,0.05); word-break: break-all; }
 .mine .bubble { background-color: var(--primary-color); color: white; border-top-right-radius: 2px; }
 .theirs .bubble { background-color: white; color: var(--text-dark); border: 1px solid #f1f5f9; border-top-left-radius: 2px; }
-
 .msg-time { font-size: 0.7rem; color: #9ca3af; margin-top: 4px; }
-
-/* ================= 底部输入区 (压缩尺寸) ================= */
-.chat-input-area {
-  background: white;
-  border-top: 1px solid #e5e7eb;
-  padding: 10px 25px 15px; /* 减小内边距 */
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0; /* 绝对不压缩这个区域 */
-  height: auto;
-}
-
-.input-toolbar { display: flex; gap: 12px; margin-bottom: 8px; }
-.tool-btn { background: transparent; border: none; font-size: 1.1rem; cursor: pointer; filter: grayscale(1); transition: 0.2s; padding: 0; }
-.tool-btn:hover { filter: grayscale(0); transform: translateY(-2px); }
-
-textarea {
-  width: 100%;
-  height: 60px; /* 极大地压缩文本框高度 */
-  border: none;
-  resize: none;
-  outline: none;
-  font-size: 0.95rem;
-  font-family: inherit;
-  color: var(--text-dark);
-  background: transparent;
-}
+.chat-input-area { background: white; border-top: 1px solid #e5e7eb; padding: 10px 25px 15px; display: flex; flex-direction: column; flex-shrink: 0; height: auto; }
+textarea { width: 100%; height: 60px; border: none; resize: none; outline: none; font-size: 0.95rem; font-family: inherit; color: var(--text-dark); background: transparent; }
 textarea::placeholder { color: #cbd5e1; }
-
 .input-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 5px; }
 .hint { font-size: 0.75rem; color: #9ca3af; }
-.send-btn { padding: 8px 25px; border-radius: 6px; font-size: 0.9rem; }
-
-/* 占位空状态 */
+.send-btn { padding: 8px 25px; border-radius: 6px; font-size: 0.9rem; background: var(--primary-color); color: white; border: none; cursor: pointer; }
 .empty-chat { justify-content: center; align-items: center; background: #f8fafc; }
 .empty-content { text-align: center; color: #9ca3af; }
 .empty-content .icon { font-size: 3rem; margin-bottom: 15px; opacity: 0.5; }

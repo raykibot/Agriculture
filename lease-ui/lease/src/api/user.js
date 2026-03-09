@@ -25,3 +25,30 @@ export const registerAPI = (data) => {
     data: data
   })
 }
+
+// 获取历史聊天记录
+export const getChatHistoryAPI = (userId1, userId2) => {
+  return request({
+    url: '/api/chat/history',
+    method: 'get',
+    params: { userId1, userId2 }
+  })
+}
+
+// 2. 批量获取在线状态
+export const getBatchOnlineStatusAPI = (userIds) => {
+  return request({
+    url: '/api/chat/online-status/batch',
+    method: 'post',
+    data: userIds // 注意：后端使用 @RequestBody，所以这里用 data (放在请求体里)
+  })
+}
+
+// 3. 将消息标记为已读
+export const markAsReadAPI = (fromUserId, toUserId) => {
+  return request({
+    url: '/api/chat/read',
+    method: 'post',
+    params: { fromUserId, toUserId } // 注意：后端使用 @RequestParam，所以用 params (放在URL拼接里)
+  })
+}

@@ -9,6 +9,15 @@
             (#{id}, #{fromUserId}, #{toUserId}, #{content}, #{isRead}, NOW())
     </insert>
 
+
+    <update id="updateUnreadToRead">
+        UPDATE chat_messages
+        SET is_read = 1
+        WHERE from_user_id = #{fromUserId}
+          AND to_user_id = #{toUserId}
+          AND is_read = 0
+    </update>
+
     <select id="selectHistory" resultType="com.luo.share.model.entity.ChatMessage">
         SELECT
             id, from_user_id, to_user_id, content, is_read, create_time
