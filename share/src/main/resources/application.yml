@@ -1,0 +1,27 @@
+server:
+  port: 9191
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: 123456
+    url: jdbc:mysql://localhost:3306/lease?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: # 如果你的 docker 镜像没设置密码，这里留空
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8 # 连接池最大连接数
+          max-wait: -1ms
+
+
+mybatis-plus:
+  mapper-locations: classpath:com/luo/share/mapper/*.xml
+
+jwt:
+  secret: agri_share_platform_secret_key_must_be_long_enough_2026 # 密钥必须够长
+  expiration: 21600 # 6小时的秒数 (6 * 60 * 60)

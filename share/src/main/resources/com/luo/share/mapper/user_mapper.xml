@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.luo.share.mapper.UserMapper">
+
+    <select id="countByPhoneOrUsername" resultType="int">
+        SELECT COUNT(1)
+        FROM users
+        WHERE (phone = #{phone} OR username = #{username})
+          AND is_deleted = 0
+    </select>
+
+    <insert id="insertUser" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO users (phone, username, password, role, create_time, is_deleted)
+        VALUES (#{phone}, #{username}, #{password}, 0, NOW(), 0)
+    </insert>
+
+    <select id="selectByPhone" resultType="com.luo.share.model.entity.User">
+        SELECT id, phone, password, username, avatar, role
+        FROM users
+        WHERE phone = #{phone}
+          AND is_deleted = 0
+            LIMIT 1
+    </select>
+
+</mapper>

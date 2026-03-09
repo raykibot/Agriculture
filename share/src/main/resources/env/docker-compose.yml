@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # 1. Redis 核心服务
+  redis:
+    image: redis:7.2
+    container_name: agri-redis
+    restart: always
+    ports:
+      - "6379:6379"  # 映射到宿主机的 6379 端口，供 Spring Boot 连接
+    volumes:
+      - agri-redis-data:/data  # 数据持久化挂载，防止重启后 Token 丢失
+    command: redis-server --appendonly yes  # 开启 AOF 持久化（商业必备）
+    networks:
+      - agri-network
+
+  # 2. Redis 可视化管理界面
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: agri-redis-commander
+    restart: always
+    environment:
+      # 核心逻辑：告诉 Commander 去哪里找 Redis。"local"是展示的名称，"redis:6379"是利用容器网络直接通过服务名访问
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"  # Web 访问端口
+    depends_on:
+      - redis        # 确保 Redis 先启动
+    networks:
+      - agri-network
+
+# 定义一个专属的桥接网络，让这两个容器能互相通信
+networks:
+  agri-network:
+    driver: bridge
+
+# 定义数据卷，Docker 会自动在宿主机找地方存数据
+volumes:
+  agri-redis-data:
