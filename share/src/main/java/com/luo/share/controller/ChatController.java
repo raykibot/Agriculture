@@ -60,4 +60,14 @@ public class ChatController {
         chatMessageMapper.updateUnreadToRead(fromUserId, toUserId);
         return Result.success("已读状态更新成功");
     }
+
+
+    /**
+     * 5. 获取用户的全局未读消息总数
+     */
+    @GetMapping("/unread-count")
+    public Result<Integer> getUnreadCount(@RequestParam Long userId) {
+        int count = chatMessageMapper.countTotalUnread(userId);
+        return Result.success(count);
+    }
 }

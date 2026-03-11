@@ -20,6 +20,10 @@ public class User {
 
     private Integer role;
 
+    private String realName;
+
+    private String idCard;
+
     private Date createTime;
 
     private Date updateTime;

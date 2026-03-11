@@ -52,3 +52,30 @@ export const markAsReadAPI = (fromUserId, toUserId) => {
     params: { fromUserId, toUserId } // 注意：后端使用 @RequestParam，所以用 params (放在URL拼接里)
   })
 }
+
+// 获取用户的全局未读消息总数
+export const getUnreadCountAPI = (userId) => {
+  return request({
+    url: '/api/chat/unread-count',
+    method: 'get',
+    params: { userId }
+  })
+}
+
+// 获取用户个人资料
+export const getUserProfileAPI = (userId) => {
+  return request({
+    url: '/api/user/profile',
+    method: 'get',
+    params: { userId }
+  })
+}
+
+// 提交修改/绑定个人资料
+export const updateUserProfileAPI = (data) => {
+  return request({
+    url: '/api/user/profile/update',
+    method: 'post',
+    data // 使用 POST 传递 JSON 体
+  })
+}

@@ -15,4 +15,8 @@ public interface UserMapper {
 
     // 根据手机号查询用户
     User selectByPhone(@Param("phone") String phone);
+
+    User selectById(Long userId);
+
+    void updateById(User user);
 }

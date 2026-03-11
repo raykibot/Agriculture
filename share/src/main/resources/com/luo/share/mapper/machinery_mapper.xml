@@ -22,19 +22,39 @@
 
 
     <select id="selectSimpleList" resultMap="data">
-        SELECT
-        id, name, brand, model,price, deposit,description, images, status,parameters,avg_rating,category_id
+        SELECT id, name, brand, price, images, status, category_id
         FROM machinery
         <where>
-            <if test="categoryId != null">
-                AND category_id = #{categoryId}
-            </if>
+            status != 2 <if test="categoryId != null and categoryId > 0">
+            AND category_id = #{categoryId}
+        </if>
+
             <if test="keyword != null and keyword != ''">
                 AND name LIKE CONCAT('%', #{keyword}, '%')
             </if>
-            AND status != 2 -- 排除维护中
         </where>
         ORDER BY create_time DESC
     </select>
 
+    <select id="selectRandomFromEachCategory" resultType="com.luo.share.model.vo.MachineryVO">
+        SELECT id, name, brand, price, images, status
+        FROM (
+                 SELECT id, name, brand, price, images, status,
+                        ROW_NUMBER() OVER(PARTITION BY category_id ORDER BY RAND()) as rn
+                 FROM machinery
+                 WHERE status != 2 -- 排除维护中
+             ) tmp
+        WHERE rn = 1
+    </select>
+
+
+
+    <select id="selectListByCategory" resultType="com.luo.share.model.vo.MachineryVO">
+        SELECT id, name, brand, price, images, status
+        FROM machinery
+        WHERE status != 2 <if test="categoryId != null and categoryId > 0">
+        AND category_id = #{categoryId}
+    </if>
+        ORDER BY create_time DESC
+    </select>
 </mapper>

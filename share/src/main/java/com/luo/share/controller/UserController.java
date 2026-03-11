@@ -2,14 +2,18 @@ package com.luo.share.controller;
 
 import com.luo.share.common.api.Result;
 import com.luo.share.model.dto.UserLoginDTO;
+import com.luo.share.model.dto.UserProfileUpdateDTO;
 import com.luo.share.model.dto.UserRegisterDTO;
 import com.luo.share.model.vo.LoginVO;
+import com.luo.share.model.vo.UserProfileVO;
 import com.luo.share.service.IUserService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/user")
+@Slf4j
 public class UserController {
 
     @Autowired
@@ -41,6 +45,27 @@ public class UserController {
 
         userService.logout(token);
         return Result.success("退出登录成功");
+    }
+
+
+    /**
+     * 获取当前登录用户的个人资料
+     */
+    @GetMapping("/profile")
+    public Result<UserProfileVO> getUserProfile(@RequestParam Long userId) {
+        UserProfileVO profile = userService.getUserProfile(userId);
+        return Result.success(profile);
+    }
+
+    /**
+     * 修改/绑定个人资料
+     */
+    @PostMapping("/profile/update")
+    public Result<String> updateProfile(@RequestBody UserProfileUpdateDTO dto) {
+        userService.updateProfile(dto);
+
+        log.info("更新个人信息");
+        return Result.success("资料更新成功");
     }
 
 }

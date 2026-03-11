@@ -31,4 +31,10 @@
             create_time ASC
     </select>
 
+
+    <select id="countTotalUnread" resultType="int">
+        SELECT COUNT(1) FROM chat_messages
+        WHERE to_user_id = #{userId} AND is_read = 0
+    </select>
+
 </mapper>

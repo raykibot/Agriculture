@@ -1,12 +1,20 @@
 import { request } from '../utils/request'
 
-/**
- * 获取农机设备列表
- */
-export const getMachineryListAPI = () => {
+// 获取农机分页列表 (支持分类和关键字)
+export const getMachineryListAPI = (current = 1, size = 12, categoryId = null, keyword = null) => {
   return request({
     url: '/api/machinery/list',
-    method: 'GET'
-    // 如果后续有分页和条件查询参数，可以在这里加上 params: { page, size, keyword }
+    method: 'get',
+    params: { current, size, categoryId, keyword }
   })
 }
+
+
+// 获取首页各个分类的随机热门机型
+export const getPopularMachineryAPI = () => {
+  return request({
+    url: '/api/machinery/popular',
+    method: 'get'
+  })
+}
+

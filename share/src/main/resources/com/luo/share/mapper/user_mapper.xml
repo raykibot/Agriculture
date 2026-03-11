@@ -2,6 +2,11 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.luo.share.mapper.UserMapper">
 
+
+    <update id="updateById">
+update users set real_name = #{realName},id_card = #{idCard} where id = #{id}
+    </update>
+
     <select id="countByPhoneOrUsername" resultType="int">
         SELECT COUNT(1)
         FROM users
@@ -20,6 +25,10 @@
         WHERE phone = #{phone}
           AND is_deleted = 0
             LIMIT 1
+    </select>
+
+    <select id="selectById" resultType="com.luo.share.model.entity.User">
+        select id,phone,password,username,avatar,role,create_time,update_time,is_deleted,real_name,id_card,gender,email,status from users where id = #{userId}
     </select>
 
 </mapper>

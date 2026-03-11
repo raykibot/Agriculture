@@ -1,34 +1,101 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { logoutAPI } from '@/api/user' // 引入退出登录接口
-import { showMessage } from '@/utils/message' // 引入全局弹窗
+import { logoutAPI, getUserProfileAPI, updateUserProfileAPI } from '@/api/user' 
+import { showMessage } from '@/utils/message'
 
 const router = useRouter()
-
-// 当前激活的左侧菜单栏
 const currentTab = ref('info') 
 
 // ================= 1. 个人基础信息数据 =================
 const userInfo = ref({
-  name: '李建国',
-  phone: '138****5678',
-  status: '已认证',
-  regDate: '2026-01-15',
-  region: '河南省 驻马店市 确山县',
-  address: '河南省 驻马店市 确山县 盘龙街道 智慧农业产业园A区 102栋' 
+  name: '加载中...',
+  phone: '加载中...',
+  idCard: '加载中...',
+  status: '加载中...',
+  regDate: '加载中...',
+  address: '加载中...' 
 })
 
-// ================= 2. 我的订单数据 =================
+// ================= 2. 资料编辑弹窗逻辑 =================
+const showEditModal = ref(false)
+const editForm = ref({
+  realName: '',
+  idCard: '',
+  province: '',
+  city: '',
+  district: '',
+  detailAddress: ''
+})
+const isSubmitting = ref(false)
+
+const openEditModal = () => {
+  editForm.value = { realName: '', idCard: '', province: '', city: '', district: '', detailAddress: '' }
+  showEditModal.value = true
+}
+
+const closeEditModal = () => {
+  showEditModal.value = false
+}
+
+// 提交更新资料
+const submitProfileUpdate = async () => {
+  const localUserInfo = localStorage.getItem('user_info')
+  if (!localUserInfo) return
+  const parsedUser = JSON.parse(localUserInfo)
+
+  isSubmitting.value = true
+  try {
+    const payload = {
+      userId: parsedUser.userId,
+      ...editForm.value
+    }
+    await updateUserProfileAPI(payload)
+    showMessage('资料更新成功！', 'success')
+    closeEditModal()
+    await fetchUserProfile()
+  } catch (error) {
+    console.error('更新资料失败:', error)
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
+// ================= 3. 数据拉取逻辑 =================
+const fetchUserProfile = async () => {
+  const localUserInfo = localStorage.getItem('user_info')
+  if (!localUserInfo) {
+    showMessage('登录已过期，请重新登录', 'error')
+    router.push('/login')
+    return
+  }
+  const parsedUser = JSON.parse(localUserInfo)
+  try {
+    const res = await getUserProfileAPI(parsedUser.userId)
+    const data = res.data
+    userInfo.value = {
+      name: data.realName,
+      phone: data.phone,
+      idCard: data.idCard,
+      status: data.status,
+      regDate: data.regDate,
+      address: data.defaultAddress
+    }
+  } catch (error) {
+    console.error('获取个人信息失败:', error)
+  }
+}
+
+onMounted(() => {
+  fetchUserProfile()
+})
+
+// ================= 4. 模拟订单与农机数据 =================
 const orderRole = ref('rented') 
 const orderStatus = ref('all') 
-
 const orders = ref([
-  { id: 'ORD-20260221-01', role: 'rented', status: 'ongoing', machine: '东方红 LX2204 拖拉机', image: 'https://images.unsplash.com/photo-1592982537447-6f296312a022?auto=format&fit=crop&q=80&w=400', date: '2026-02-20', days: 3, total: 1350 },
-  { id: 'ORD-20260215-02', role: 'rented', status: 'completed', machine: '大疆 T60 植保无人机', image: 'https://images.unsplash.com/photo-1579824225022-77e8a93e3630?auto=format&fit=crop&q=80&w=400', date: '2026-02-15', days: 1, total: 300 },
-  { id: 'ORD-20260225-03', role: 'rented', status: 'unpaid', machine: '极飞 V50 农业无人车', image: 'https://images.unsplash.com/photo-1586771107445-d3ca888129ff?auto=format&fit=crop&q=80&w=400', date: '2026-02-25', days: 2, total: 300 },
-  { id: 'ORD-20260210-04', role: 'leased', status: 'completed', machine: '久保田 PRO1408 收割机', image: 'https://images.unsplash.com/photo-1605615781358-1db2a197772d?auto=format&fit=crop&q=80&w=400', date: '2026-02-10', days: 5, total: 4000 },
-  { id: 'ORD-20260222-05', role: 'leased', status: 'ongoing', machine: '久保田 PRO1408 收割机', image: 'https://images.unsplash.com/photo-1605615781358-1db2a197772d?auto=format&fit=crop&q=80&w=400', date: '2026-02-21', days: 2, total: 1600 }
+  { id: 'ORD-20260221-01', role: 'rented', status: 'ongoing', machine: '东方红 LX2204 拖拉机', image: 'http://localhost:9191/images/demo.jpg', date: '2026-02-20', days: 3, total: 1350 },
+  { id: 'ORD-20260215-02', role: 'rented', status: 'completed', machine: '大疆 T60 植保无人机', image: 'http://localhost:9191/images/demo.jpg', date: '2026-02-15', days: 1, total: 300 }
 ])
 
 const filteredOrders = computed(() => {
@@ -39,11 +106,8 @@ const filteredOrders = computed(() => {
   })
 })
 
-// ================= 3. 我发布的农机数据 =================
 const publishedMachines = ref([
-  { id: 'M-001', name: '久保田 PRO1408 收割机', image: 'https://images.unsplash.com/photo-1605615781358-1db2a197772d?auto=format&fit=crop&q=80&w=400', status: 'renting', publishTime: '2026-01-10 09:30', rentOutTime: '2026-02-21 08:00', returnTime: '2026-02-23 18:00', offlineTime: '-', price: 800 },
-  { id: 'M-002', name: '雷沃谷神 联合收割机', image: 'https://images.unsplash.com/photo-1625246333195-78d9c38ad449?auto=format&fit=crop&q=80&w=400', status: 'available', publishTime: '2026-02-01 14:20', rentOutTime: '-', returnTime: '-', offlineTime: '-', price: 600 },
-  { id: 'M-003', name: '旧款 东方红小型拖拉机', image: 'https://images.unsplash.com/photo-1589923188900-85dae523342b?auto=format&fit=crop&q=80&w=400', status: 'offline', publishTime: '2025-10-05 10:00', rentOutTime: '-', returnTime: '-', offlineTime: '2026-01-20 12:00', price: 200 }
+  { id: 'M-001', name: '久保田 PRO1408 收割机', image: 'http://localhost:9191/images/demo.jpg', status: 'renting', publishTime: '2026-01-10 09:30', rentOutTime: '2026-02-21 08:00', returnTime: '2026-02-23 18:00', offlineTime: '-', price: 800 }
 ])
 
 const statusMap = {
@@ -55,22 +119,16 @@ const statusMap = {
   'offline': { text: '已下架', color: '#6b7280', bg: '#f3f4f6' }
 }
 
-// ================= 4. 退出登录逻辑 =================
+// ================= 5. 退出登录逻辑 =================
 const handleLogout = async () => {
-  // 加入一个原生的确认框，防止用户误触
   if (!confirm('确定要退出当前账号吗？')) return
-
   try {
-    // 调用后端退出接口清除服务端的 token 状态（如果有的话）
     await logoutAPI()
   } catch (error) {
     console.warn('后端退出异常，强制清理本地数据', error)
   } finally {
-    // 无论后端是否报错，前端必须清除本地凭证
     localStorage.removeItem('user_token')
     localStorage.removeItem('user_info')
-    
-    // 弹出提示并跳回登录页
     showMessage('您已安全退出登录', 'success')
     router.push('/login')
   }
@@ -84,7 +142,9 @@ const handleLogout = async () => {
         <div class="avatar">
           <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User Avatar" />
         </div>
-        <h3 class="user-name">{{ userInfo.name }}</h3>
+        <h3 :class="['user-name', { 'text-danger': userInfo.name === '未绑定' }]">
+          {{ userInfo.name === '未绑定' ? '未命名用户' : userInfo.name }}
+        </h3>
         <span class="user-role">农户 / 租赁方</span>
       </div>
 
@@ -117,17 +177,38 @@ const handleLogout = async () => {
         <div class="content-card">
           <div class="card-header">
             <h2>基础档案</h2>
-            <button class="btn-edit">编辑资料</button>
+            <button class="btn-edit" @click="openEditModal">编辑资料</button>
           </div>
+          
           <div class="info-grid">
-            <div class="info-item"><span class="label">真实姓名</span><span class="value">{{ userInfo.name }}</span></div>
+            <div class="info-item">
+              <span class="label">真实姓名</span>
+              <span :class="['value', { 'text-danger': userInfo.name === '未绑定' }]">
+                {{ userInfo.name }}
+                <span v-if="userInfo.name === '未绑定'" class="action-hint" @click="openEditModal">(去实名绑定 ➔)</span>
+              </span>
+            </div>
             <div class="info-item"><span class="label">手机号码</span><span class="value">{{ userInfo.phone }}</span></div>
-            <div class="info-item"><span class="label">实名认证状态</span><span class="value status-verified">{{ userInfo.status }} ✓</span></div>
+            <div class="info-item">
+              <span class="label">身份证号码</span>
+              <span :class="['value', { 'text-danger': userInfo.idCard === '未绑定' }]">
+                {{ userInfo.idCard }}
+                <span v-if="userInfo.idCard === '未绑定'" class="action-hint" @click="openEditModal">(完成认证以解锁发布 ➔)</span>
+              </span>
+            </div>
+            <div class="info-item">
+              <span class="label">实名认证状态</span>
+              <span :class="['value', userInfo.status === '已认证' ? 'status-verified' : 'text-danger']">
+                {{ userInfo.status }} <span v-if="userInfo.status === '已认证'">✓</span>
+              </span>
+            </div>
             <div class="info-item"><span class="label">注册时间</span><span class="value">{{ userInfo.regDate }}</span></div>
-            <div class="info-item"><span class="label">主要作业地区</span><span class="value">{{ userInfo.region }}</span></div>
             <div class="info-item full-width address-box">
               <span class="label">默认收货/接机场地地址</span>
-              <span class="value">{{ userInfo.address }}</span>
+              <span :class="['value', { 'text-danger': userInfo.address === '暂未设置默认地址' }]">
+                {{ userInfo.address }}
+                <span v-if="userInfo.address === '暂未设置默认地址'" class="action-hint" @click="openEditModal">(立即设置 ➔)</span>
+              </span>
             </div>
           </div>
         </div>
@@ -141,31 +222,23 @@ const handleLogout = async () => {
 
       <div v-if="currentTab === 'orders'" class="tab-pane fade-in">
         <div class="content-card full-height">
-          <div class="card-header border-none">
-            <h2>订单管理</h2>
-          </div>
-          
+          <div class="card-header border-none"><h2>订单管理</h2></div>
           <div class="role-tabs">
             <button :class="['role-tab', { active: orderRole === 'rented' }]" @click="orderRole = 'rented'">我租赁的机器 (我是租客)</button>
             <button :class="['role-tab', { active: orderRole === 'leased' }]" @click="orderRole = 'leased'">别人租赁我的 (我是机主)</button>
           </div>
-
           <div class="filter-pills">
             <span :class="['pill', { active: orderStatus === 'all' }]" @click="orderStatus = 'all'">全部</span>
             <span :class="['pill', { active: orderStatus === 'unpaid' }]" @click="orderStatus = 'unpaid'">待付款</span>
             <span :class="['pill', { active: orderStatus === 'ongoing' }]" @click="orderStatus = 'ongoing'">进行中</span>
             <span :class="['pill', { active: orderStatus === 'completed' }]" @click="orderStatus = 'completed'">已完成</span>
           </div>
-
           <div class="order-list">
             <div class="empty-state" v-if="filteredOrders.length === 0">暂无符合条件的订单记录</div>
-            
             <div class="list-card" v-for="order in filteredOrders" :key="order.id">
               <div class="list-card-header">
                 <span class="order-id">订单号：{{ order.id }}</span>
-                <span class="status-badge" :style="{ color: statusMap[order.status].color, backgroundColor: statusMap[order.status].bg }">
-                  {{ statusMap[order.status].text }}
-                </span>
+                <span class="status-badge" :style="{ color: statusMap[order.status].color, backgroundColor: statusMap[order.status].bg }">{{ statusMap[order.status].text }}</span>
               </div>
               <div class="list-card-body">
                 <img :src="order.image" class="item-img" />
@@ -194,7 +267,6 @@ const handleLogout = async () => {
             <h2>我发布的农机设备</h2>
             <button class="btn-primary-small">+ 发布新农机</button>
           </div>
-
           <div class="machine-list">
             <div class="list-card" v-for="machine in publishedMachines" :key="machine.id">
               <div class="list-card-body">
@@ -202,35 +274,26 @@ const handleLogout = async () => {
                 <div class="item-info expand">
                   <div class="title-row">
                     <h4 class="item-title">{{ machine.name }}</h4>
-                    <span class="status-badge" :style="{ color: statusMap[machine.status].color, backgroundColor: statusMap[machine.status].bg }">
-                      {{ statusMap[machine.status].text }}
-                    </span>
+                    <span class="status-badge" :style="{ color: statusMap[machine.status].color, backgroundColor: statusMap[machine.status].bg }">{{ statusMap[machine.status].text }}</span>
                   </div>
-                  
                   <div class="timeline-grid">
                     <div class="time-item"><span>发布时间:</span> {{ machine.publishTime }}</div>
                     <div class="time-item" v-if="machine.status === 'renting'"><span>起租时间:</span> {{ machine.rentOutTime }}</div>
                     <div class="time-item" v-if="machine.status === 'renting'"><span>预计归还:</span> <strong style="color:var(--primary-color)">{{ machine.returnTime }}</strong></div>
-                    <div class="time-item" v-if="machine.status === 'offline'"><span>下架时间:</span> {{ machine.offlineTime }}</div>
                   </div>
                 </div>
-                
                 <div class="item-price border-left">
                   <span class="label">日租金</span>
                   <span class="amount">￥{{ machine.price }}</span>
                   <span class="unit">/天</span>
                 </div>
-                
                 <div class="item-actions vertical">
                   <button class="btn-outline w-full" v-if="machine.status === 'available'">编辑信息</button>
-                  <button class="btn-outline w-full" v-if="machine.status === 'available'">下架设备</button>
                   <button class="btn-primary-small w-full" v-if="machine.status === 'renting'">查看订单</button>
-                  <button class="btn-primary-small w-full" v-if="machine.status === 'offline'">重新上架</button>
                 </div>
               </div>
             </div>
           </div>
-
         </div>
       </div>
 
@@ -242,58 +305,106 @@ const handleLogout = async () => {
       </div>
 
     </main>
+
+    <div v-if="showEditModal" class="modal-overlay">
+      <div class="modal-content fade-in">
+        <div class="modal-header">
+          <h3>完善个人资料</h3>
+          <span class="close-btn" @click="closeEditModal">&times;</span>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>真实姓名 <span class="required">*</span></label>
+            <input type="text" v-model="editForm.realName" placeholder="填写真实姓名以保障交易安全" />
+          </div>
+          <div class="form-group">
+            <label>身份证号码 <span class="required">*</span></label>
+            <input type="text" v-model="editForm.idCard" placeholder="请输入18位二代身份证号码" />
+          </div>
+          
+          <div class="form-group-row">
+            <div class="form-group half-width">
+              <label>所在省份</label>
+              <input type="text" v-model="editForm.province" placeholder="例：河南省" />
+            </div>
+            <div class="form-group half-width">
+              <label>所在城市</label>
+              <input type="text" v-model="editForm.city" placeholder="例：驻马店市" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>所在区/县</label>
+            <input type="text" v-model="editForm.district" placeholder="例：确山县" />
+          </div>
+
+          <div class="form-group">
+            <label>详细地址</label>
+            <input type="text" v-model="editForm.detailAddress" placeholder="街道、小区、农场具体位置" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-outline" @click="closeEditModal">取消</button>
+          <button class="btn-primary-small" @click="submitProfileUpdate" :disabled="isSubmitting">
+            {{ isSubmitting ? '提交中...' : '确认保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <style scoped>
-.dashboard-layout {
-  display: flex;
-  min-height: calc(100vh - 80px);
-  background-color: #f3f4f6;
-  width: 100%;
-}
+.text-danger { color: #ef4444 !important; font-weight: 700 !important; }
+.action-hint { font-size: 0.8rem; color: #ef4444; margin-left: 8px; font-weight: 500; text-decoration: underline; cursor: pointer; transition: opacity 0.2s; }
+.action-hint:hover { opacity: 0.7; }
 
-.sidebar {
-  width: 280px;
-  background: white;
-  border-right: 1px solid #e5e7eb;
-  display: flex;
-  flex-direction: column;
-  padding: 30px 20px;
-  flex-shrink: 0;
-}
+/* ================= 优化后的极其紧凑版弹窗 CSS ================= */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; z-index: 2000; }
+.modal-content { background: #ffffff; width: 440px; border-radius: 12px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1); overflow: hidden; } /* 宽度进一步压缩至 440px */
+.modal-header { padding: 12px 20px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { margin: 0; font-size: 1.1rem; color: var(--text-dark); font-weight: 800; }
+.close-btn { font-size: 1.4rem; color: #94a3b8; cursor: pointer; transition: color 0.2s; line-height: 1; }
+.close-btn:hover { color: #ef4444; }
 
+.modal-body { padding: 15px 20px; } /* 压榨主体内边距 */
+.form-group { margin-bottom: 12px; display: flex; flex-direction: column; } /* 压榨底部间距 */
+.form-group-row { display: flex; gap: 12px; } 
+.half-width { flex: 1; } /* 让同行元素均分宽度 */
+.form-group label { font-size: 0.8rem; font-weight: 600; color: var(--text-medium); margin-bottom: 4px; } /* 字号和间距做到最小可视范围 */
+.form-group .required { color: #ef4444; }
+.form-group input { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; outline: none; transition: border-color 0.2s; } /* 控件高度变小 */
+.form-group input::placeholder { color: #94a3b8; }
+.form-group input:focus { border-color: var(--primary-color); }
+
+.modal-footer { padding: 10px 20px; background: #f8fafc; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #f1f5f9; }
+.modal-footer .btn-primary-small, .modal-footer .btn-outline { padding: 6px 16px; font-size: 0.85rem; }
+
+/* 保持全局样式 */
+.dashboard-layout { display: flex; min-height: calc(100vh - 80px); background-color: #f3f4f6; width: 100%; }
+.sidebar { width: 280px; background: white; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; padding: 30px 20px; flex-shrink: 0; }
 .user-brief { text-align: center; margin-bottom: 30px; padding-bottom: 30px; border-bottom: 1px solid #f3f4f6; }
 .avatar { width: 90px; height: 90px; border-radius: 50%; background: #f3f4f6; margin: 0 auto 15px; overflow: hidden; border: 3px solid white; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
 .user-name { font-size: 1.3rem; font-weight: 700; color: var(--text-dark); margin-bottom: 5px; }
 .user-role { font-size: 0.85rem; color: var(--primary-color); font-weight: 600; background: rgba(84, 101, 255, 0.1); padding: 4px 12px; border-radius: 20px; }
-
 .sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: 8px; }
 .nav-item { display: flex; align-items: center; gap: 15px; padding: 14px 20px; border-radius: 10px; color: var(--text-medium); font-weight: 600; transition: 0.3s; font-size: 1.05rem; }
 .nav-item:hover { background: #f9fafb; color: var(--primary-color); }
 .nav-item.active { background: var(--primary-color); color: white; box-shadow: 0 4px 15px rgba(84, 101, 255, 0.3); }
-
 .sidebar-footer { padding-top: 20px; border-top: 1px solid #f3f4f6; }
 .btn-logout { width: 100%; background: transparent; color: #ef4444; border: 1px solid #fca5a5; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: 0.3s; }
 .btn-logout:hover { background: #fee2e2; }
-
-.main-content {
-  flex: 1;
-  padding: 40px;
-  overflow-y: auto; 
-}
-
+.main-content { flex: 1; padding: 40px; overflow-y: auto; }
 .tab-pane { display: flex; flex-direction: column; gap: 30px; height: 100%; }
 .fade-in { animation: fadeIn 0.3s ease-in-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
 .content-card { background: white; border-radius: 16px; padding: 35px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
 .full-height { min-height: 100%; }
 .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 15px; border-bottom: 1px solid #f3f4f6; }
 .card-header.border-none { border-bottom: none; padding-bottom: 0; margin-bottom: 25px; }
 .card-header h2 { font-size: 1.4rem; color: var(--text-dark); font-weight: 800; }
-
 .btn-edit { background: transparent; border: 2px solid var(--primary-color); color: var(--primary-color); padding: 8px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
 .btn-edit:hover { background: var(--primary-color); color: white; }
 .btn-primary-small { background: var(--primary-color); color: white; border: none; padding: 8px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
@@ -301,7 +412,6 @@ const handleLogout = async () => {
 .btn-outline { background: white; color: var(--text-dark); border: 1px solid #d1d5db; padding: 8px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.3s; }
 .btn-outline:hover { border-color: var(--primary-color); color: var(--primary-color); }
 .w-full { width: 100%; }
-
 .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
 .full-width { grid-column: 1 / -1; }
 .info-item { display: flex; flex-direction: column; gap: 8px; }
@@ -309,49 +419,39 @@ const handleLogout = async () => {
 .info-item .value { color: var(--text-dark); font-size: 1.1rem; font-weight: 500; }
 .status-verified { color: #10b981 !important; font-weight: 700 !important; }
 .address-box { background: #f9fafb; padding: 20px; border-radius: 12px; border: 1px dashed #e5e7eb; }
-
 .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .mt-30 { margin-top: 30px; }
 .stat-card { background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border-left: 4px solid var(--primary-color); }
 .stat-num { font-size: 2.2rem; font-weight: 900; color: var(--text-dark); margin-bottom: 5px; }
 .stat-label { color: var(--text-medium); font-weight: 500; }
-
 .role-tabs { display: flex; border-bottom: 2px solid #f3f4f6; margin-bottom: 20px; }
 .role-tab { background: transparent; border: none; padding: 10px 25px; font-size: 1.1rem; font-weight: 600; color: var(--text-medium); cursor: pointer; position: relative; bottom: -2px; }
 .role-tab.active { color: var(--primary-color); border-bottom: 2px solid var(--primary-color); }
-
 .filter-pills { display: flex; gap: 15px; margin-bottom: 25px; }
 .pill { padding: 6px 18px; background: #f3f4f6; color: var(--text-medium); border-radius: 20px; font-size: 0.9rem; cursor: pointer; font-weight: 600; transition: 0.3s; }
 .pill.active { background: var(--primary-color); color: white; }
-
 .list-card { border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 20px; overflow: hidden; transition: 0.3s; }
 .list-card:hover { box-shadow: 0 10px 25px rgba(0,0,0,0.05); border-color: #d1d5db; }
 .list-card-header { background: #f9fafb; padding: 12px 20px; display: flex; justify-content: space-between; border-bottom: 1px solid #e5e7eb; font-size: 0.9rem; }
 .order-id { color: var(--text-medium); }
 .status-badge { padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.8rem; }
-
 .list-card-body { padding: 20px; display: flex; align-items: center; gap: 20px; }
 .item-img { width: 120px; height: 80px; border-radius: 8px; object-fit: cover; }
 .item-img.large-img { width: 160px; height: 110px; }
-
 .item-info { flex: 1; }
 .item-info.expand { flex: 2; }
 .item-title { font-size: 1.15rem; color: var(--text-dark); font-weight: 700; margin-bottom: 8px; }
 .item-desc { color: var(--text-medium); font-size: 0.9rem; }
 .title-row { display: flex; align-items: center; gap: 15px; margin-bottom: 15px; }
-
 .timeline-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; color: var(--text-medium); background: #f9fafb; padding: 10px 15px; border-radius: 8px; }
 .time-item span { color: var(--text-light); margin-right: 5px; }
-
 .item-price { text-align: right; padding-right: 20px; display: flex; flex-direction: column; justify-content: center; }
 .item-price.border-left { padding-left: 20px; border-left: 1px dashed #e5e7eb; }
 .item-price .label { font-size: 0.85rem; color: var(--text-light); }
 .item-price .amount { font-size: 1.4rem; font-weight: 800; color: var(--text-dark); }
 .item-price .unit { font-size: 0.8rem; color: var(--text-medium); }
-
 .item-actions { display: flex; gap: 10px; }
 .item-actions.vertical { flex-direction: column; width: 120px; }
-
 .empty-state { text-align: center; padding: 60px 0; color: var(--text-medium); }
 .flex-center { justify-content: center; align-items: center; }
 

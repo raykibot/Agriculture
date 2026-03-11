@@ -49,7 +49,12 @@ const router = createRouter({
       name: 'publish',
       component: PublishView,
       meta: { requiresAuth: true } 
-    }
+    },
+    {
+      path: '/machinery/:id', // 注意这个 :id 是动态参数
+      name: 'machineryDetail',
+      component: () => import('../views/MachineryDetailView.vue')
+    },
   ],
 })
 

@@ -20,7 +20,6 @@ public class MachineryImpl implements IMachineryService {
     @Override
     public Page<MachineryVO> getMachineryPage(Integer current, Integer size, Long categoryId, String keyword) {
 
-
         Page<MachineryVO> page = new Page<>(current, size);
         List<MachineryVO> list = machineryMapper.selectSimpleList(page, categoryId, keyword);
         page.setRecords(list);
@@ -29,5 +28,8 @@ public class MachineryImpl implements IMachineryService {
         return page;
     }
 
-
+    @Override
+    public List<MachineryVO> getPopularMachinery() {
+        return machineryMapper.selectRandomFromEachCategory();
+    }
 }

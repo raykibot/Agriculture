@@ -1,9 +1,14 @@
 package com.luo.share.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.luo.share.common.utils.RedisUtil;
+import com.luo.share.mapper.UserAddressMapper;
 import com.luo.share.mapper.UserMapper;
+import com.luo.share.model.dto.UserProfileUpdateDTO;
 import com.luo.share.model.entity.User;
+import com.luo.share.model.entity.UserAddress;
 import com.luo.share.model.vo.LoginVO;
+import com.luo.share.model.vo.UserProfileVO;
 import com.luo.share.service.IUserService;
 import com.luo.share.websocket.ChatWebSocketServer;
 import io.jsonwebtoken.Claims;
@@ -15,8 +20,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,6 +37,9 @@ public class UserServiceImpl implements IUserService {
 
     @Autowired
     private RedisUtil redisUtil;
+
+    @Autowired
+    private UserAddressMapper userAddressMapper;
 
     @Value("${jwt.secret}")
     private String jwtSecret;
@@ -123,6 +133,113 @@ public class UserServiceImpl implements IUserService {
         } catch (Exception e) {
             // 如果 Token 已经过期或者格式不对，说明本身就属于无效状态，直接打印日志放行
             log.warn("退出登录时解析 Token 失败或已过期: {}", e.getMessage());
+        }
+    }
+
+    @Override
+    public UserProfileVO getUserProfile(Long userId) {
+        // 1. 查询用户基础信息
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+
+        UserProfileVO vo = new UserProfileVO();
+        vo.setUsername(user.getUsername());
+
+        // 2. 手机号脱敏 (保留前3后4)
+        String phone = user.getPhone();
+        if (phone != null && phone.length() == 11) {
+            vo.setPhone(phone.replaceAll("(\\d{3})\\d{4}(\\d{4})", "$1****$2"));
+        } else {
+            vo.setPhone(phone);
+        }
+
+        // 3. 身份证与真实姓名脱敏 (实名认证判断)
+        String idCard = user.getIdCard();
+        String realName = user.getRealName();
+        if (idCard != null && realName != null) {
+            vo.setStatus("已认证");
+            // 身份证保留前6后4
+            vo.setIdCard(idCard.replaceAll("(\\d{6})\\d{8}(\\w{4})", "$1********$2"));
+            // 姓名只展示最后一个字，前面用星号代替 (如: 李建国 -> **国)
+            String maskedName = realName.replaceAll(".", "*").substring(0, realName.length() - 1)
+                    + realName.substring(realName.length() - 1);
+            vo.setRealName(maskedName);
+        } else {
+            vo.setStatus("未实名");
+            vo.setIdCard("未绑定");
+            vo.setRealName("未绑定");
+        }
+
+        // 4. 格式化注册时间
+        if (user.getCreateTime() != null) {
+            vo.setRegDate(new SimpleDateFormat("yyyy-MM-dd").format(user.getCreateTime()));
+        }
+
+        // 5. 查询默认收货地址
+        QueryWrapper<UserAddress> addressQuery = new QueryWrapper<>();
+        addressQuery.eq("user_id", userId).eq("is_default", 1).last("LIMIT 1");
+        UserAddress defaultAddress = userAddressMapper.selectOne(addressQuery);
+
+        if (defaultAddress != null) {
+            String fullAddress = String.format("%s %s %s %s",
+                    defaultAddress.getProvince(),
+                    defaultAddress.getCity(),
+                    defaultAddress.getDistrict(),
+                    defaultAddress.getDetailAddress());
+            vo.setDefaultAddress(fullAddress);
+        } else {
+            vo.setDefaultAddress("暂未设置默认地址");
+        }
+
+        return vo;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    @Override
+    public void updateProfile(UserProfileUpdateDTO dto) {
+        // 1. 更新 users 表的实名信息
+        User user = userMapper.selectById(dto.getUserId());
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+
+        if (dto.getRealName() != null && !dto.getRealName().trim().isEmpty()) {
+            user.setRealName(dto.getRealName());
+        }
+        if (dto.getIdCard() != null && !dto.getIdCard().trim().isEmpty()) {
+            user.setIdCard(dto.getIdCard());
+        }
+        userMapper.updateById(user);
+
+        // 2. 更新或新增默认收货地址 user_addresses 表
+        if (dto.getProvince() != null && !dto.getProvince().trim().isEmpty() &&
+                dto.getDetailAddress() != null && !dto.getDetailAddress().trim().isEmpty()) {
+
+            QueryWrapper<UserAddress> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("user_id", dto.getUserId()).eq("is_default", 1).last("LIMIT 1");
+            UserAddress address = userAddressMapper.selectOne(queryWrapper);
+
+            if (address == null) {
+                // 如果以前没有默认地址，则新建一条
+                address = new UserAddress();
+                address.setUserId(dto.getUserId());
+                address.setIsDefault(1);
+                address.setReceiverName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+                address.setReceiverPhone(user.getPhone());
+            }
+            // 更新地址内容
+            address.setProvince(dto.getProvince());
+            address.setCity(dto.getCity());
+            address.setDistrict(dto.getDistrict() != null ? dto.getDistrict() : "");
+            address.setDetailAddress(dto.getDetailAddress());
+
+            if (address.getId() == null) {
+                userAddressMapper.insert(address);
+            } else {
+                userAddressMapper.updateById(address);
+            }
         }
     }
 }

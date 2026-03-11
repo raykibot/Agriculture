@@ -28,4 +28,9 @@ public interface ChatMessageMapper {
      */
     void updateUnreadToRead(@Param("fromUserId") Long fromUserId, @Param("toUserId") Long toUserId);
 
+    /**
+     * 统计某个用户所有的未读消息总数
+     */
+    int countTotalUnread(@Param("userId") Long userId);
+
 }
