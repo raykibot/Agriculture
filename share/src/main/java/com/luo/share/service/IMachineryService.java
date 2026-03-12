@@ -12,4 +12,5 @@ public interface IMachineryService {
     List<MachineryVO> getPopularMachinery();
 
 
+    MachineryVO getById(Long id);
 }

@@ -5,6 +5,8 @@ import ProfileView from '../views/ProfileView.vue'
 import MachineryListView from '../views/MachineryListView.vue'
 import MessagesView from '../views/MessagesView.vue'
 import PublishView from '../views/PublishView.vue'
+import ConfirmOrderView from '../views/ConfirmOrderView.vue'
+import MachineryDetailView from '../views/MachineryDetailView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -53,7 +55,12 @@ const router = createRouter({
     {
       path: '/machinery/:id', // 注意这个 :id 是动态参数
       name: 'machineryDetail',
-      component: () => import('../views/MachineryDetailView.vue')
+      component: MachineryDetailView
+    },
+    {
+      path: '/confirm-order',
+      name: 'confirmOrder',
+      component: () => import('../views/ConfirmOrderView.vue')
     },
   ],
 })

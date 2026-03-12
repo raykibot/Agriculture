@@ -18,4 +18,5 @@ public class UserAddress {
     private String district;
     private String detailAddress;
     private Integer isDefault;
+    private Integer isDeleted;
 }

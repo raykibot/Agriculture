@@ -79,3 +79,17 @@ export const updateUserProfileAPI = (data) => {
     data // 使用 POST 传递 JSON 体
   })
 }
+
+// ================= 地址管理接口 =================
+export const getAddressListAPI = (userId) => {
+  return request({ url: '/api/user/address/list', method: 'get', params: { userId } })
+}
+export const addAddressAPI = (data) => {
+  return request({ url: '/api/user/address/add', method: 'post', data })
+}
+export const setDefaultAddressAPI = (userId, addressId) => {
+  return request({ url: '/api/user/address/default', method: 'post', params: { userId, addressId } })
+}
+export const deleteAddressAPI = (userId, addressId) => {
+  return request({ url: '/api/user/address/delete', method: 'post', params: { userId, addressId } })
+}

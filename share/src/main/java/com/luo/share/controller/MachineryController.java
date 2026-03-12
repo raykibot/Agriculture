@@ -40,5 +40,18 @@ public class MachineryController {
         return Result.success(data);
     }
 
+    /**
+     * 根据 ID 获取农机详情
+     */
+    @GetMapping("/detail/{id}")
+    public Result<MachineryVO> getMachineryDetail(@PathVariable("id") Long id) {
+        // 直接使用 MyBatis-Plus 默认的 getById 方法查询数据库
+        MachineryVO machinery = machineryService.getById(id);
+        if (machinery == null) {
+            return Result.failed(500, "该设备不存在或已被下架");
+        }
+        return Result.success(machinery);
+    }
+
 
 }

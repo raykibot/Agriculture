@@ -29,7 +29,23 @@ services:
     networks:
       - agri-network
 
-# 定义一个专属的桥接网络，让这两个容器能互相通信
+  # 3. RabbitMQ 消息队列服务 (带可视化界面)
+  rabbitmq:
+    image: rabbitmq:management  # 使用你刚刚拉取的带 management 标签的镜像
+    container_name: agri-rabbitmq
+    restart: always
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest   # 默认登录账号
+      - RABBITMQ_DEFAULT_PASS=guest   # 默认登录密码
+    ports:
+      - "5672:5672"    # AMQP 协议端口，供你的 Spring Boot 代码连接发消息使用
+      - "15672:15672"  # HTTP 管理界面端口，供你在浏览器中查看队列状态使用
+    volumes:
+      - agri-rabbitmq-data:/var/lib/rabbitmq  # 数据持久化挂载，防止重启导致队列和消息丢失
+    networks:
+      - agri-network
+
+# 定义一个专属的桥接网络，让这些容器能互相通信
 networks:
   agri-network:
     driver: bridge
@@ -37,3 +53,4 @@ networks:
 # 定义数据卷，Docker 会自动在宿主机找地方存数据
 volumes:
   agri-redis-data:
+  agri-rabbitmq-data:  # 新增 RabbitMQ 数据卷

@@ -37,12 +37,25 @@
     </select>
 
     <select id="selectRandomFromEachCategory" resultType="com.luo.share.model.vo.MachineryVO">
-        SELECT id, name, brand, price, images, status
-        FROM (
-                 SELECT id, name, brand, price, images, status,
-                        ROW_NUMBER() OVER(PARTITION BY category_id ORDER BY RAND()) as rn
-                 FROM machinery
-                 WHERE status != 2 -- 排除维护中
+        SELECT id,
+               name,
+               owner_id,
+               category_id,
+               brand,
+               price,
+               images,
+               status
+        FROM (SELECT id,
+                     name,
+                     brand,
+                     owner_id,
+                     category_id,
+                     price,
+                     images,
+                     status,
+                     ROW_NUMBER() OVER(PARTITION BY category_id ORDER BY RAND()) as rn
+              FROM machinery
+              WHERE status != 2 -- 排除维护中
              ) tmp
         WHERE rn = 1
     </select>
@@ -57,4 +70,27 @@
     </if>
         ORDER BY create_time DESC
     </select>
+
+    <select id="getMachineryByID" resultMap="data">
+    select id,owner_id,category_id,name,brand,model,description,price,images,status,avg_rating,deposit,parameters from machinery where id = #{id}
+    </select>
+
+    <select id="selectMachineryById" resultType="com.luo.share.model.entity.Machinery">
+        SELECT * FROM machinery WHERE id = #{id}
+    </select>
+
+    <update id="lockMachineryStock">
+        UPDATE machinery
+        SET stock = stock - 1,
+            locked_stock = locked_stock + 1
+        WHERE id = #{id} AND stock > 0
+    </update>
+
+
+    <update id="releaseMachineryStock">
+        UPDATE machinery
+        SET stock = stock + 1,
+            locked_stock = locked_stock - 1
+        WHERE id = #{id} AND locked_stock > 0
+    </update>
 </mapper>

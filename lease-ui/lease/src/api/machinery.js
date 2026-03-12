@@ -18,3 +18,11 @@ export const getPopularMachineryAPI = () => {
   })
 }
 
+// 获取农机设备详情
+export const getMachineryDetailAPI = (id) => {
+  return request({
+    url: `/api/machinery/detail/${id}`,
+    method: 'get'
+  })
+}
+

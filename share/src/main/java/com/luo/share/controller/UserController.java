@@ -1,15 +1,19 @@
 package com.luo.share.controller;
 
 import com.luo.share.common.api.Result;
+import com.luo.share.model.dto.AddressAddDTO;
 import com.luo.share.model.dto.UserLoginDTO;
 import com.luo.share.model.dto.UserProfileUpdateDTO;
 import com.luo.share.model.dto.UserRegisterDTO;
+import com.luo.share.model.entity.UserAddress;
 import com.luo.share.model.vo.LoginVO;
 import com.luo.share.model.vo.UserProfileVO;
 import com.luo.share.service.IUserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/user")
@@ -66,6 +70,31 @@ public class UserController {
 
         log.info("更新个人信息");
         return Result.success("资料更新成功");
+    }
+
+    // ================= 地址管理相关接口 =================
+
+    @GetMapping("/address/list")
+    public Result<List<UserAddress>> getAddressList(@RequestParam Long userId) {
+        return Result.success(userService.getAddressList(userId));
+    }
+
+    @PostMapping("/address/add")
+    public Result<String> addAddress(@RequestBody AddressAddDTO dto) {
+        userService.addAddress(dto);
+        return Result.success("地址添加成功");
+    }
+
+    @PostMapping("/address/default")
+    public Result<String> setDefaultAddress(@RequestParam Long userId, @RequestParam Long addressId) {
+        userService.setDefaultAddress(userId, addressId);
+        return Result.success("设置默认成功");
+    }
+
+    @PostMapping("/address/delete")
+    public Result<String> deleteAddress(@RequestParam Long userId, @RequestParam Long addressId) {
+        userService.deleteAddress(userId, addressId);
+        return Result.success("删除成功");
     }
 
 }

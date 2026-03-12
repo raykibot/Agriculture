@@ -32,4 +32,9 @@ public class MachineryImpl implements IMachineryService {
     public List<MachineryVO> getPopularMachinery() {
         return machineryMapper.selectRandomFromEachCategory();
     }
+
+    @Override
+    public MachineryVO getById(Long id) {
+        return machineryMapper.getMachineryByID(id);
+    }
 }

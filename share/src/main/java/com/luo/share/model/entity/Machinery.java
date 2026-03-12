@@ -1,4 +1,4 @@
-package com.luo.share.model.vo;
+package com.luo.share.model.entity;
 
 import lombok.Data;
 
@@ -7,14 +7,14 @@ import java.util.List;
 import java.util.Map;
 
 @Data
-public class MachineryVO {
+public class Machinery {
 
     private Long id;
-    private String name;
     private Long ownerId;
+    private Long categoryId;
+    private String name;
     private String brand;
     private String model;
-    private Long categoryId;
     private BigDecimal price;
     private BigDecimal deposit;
     private String description;
@@ -23,5 +23,9 @@ public class MachineryVO {
     private List<String> tagList;  // 关联 tags 表查出的名称列表
     private Integer status;
     private Double avgRating;
+    private Integer stock;
+    private Integer lockedStock;
+
+
 
 }

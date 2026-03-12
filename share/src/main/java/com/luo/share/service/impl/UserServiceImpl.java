@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.luo.share.common.utils.RedisUtil;
 import com.luo.share.mapper.UserAddressMapper;
 import com.luo.share.mapper.UserMapper;
+import com.luo.share.model.dto.AddressAddDTO;
 import com.luo.share.model.dto.UserProfileUpdateDTO;
 import com.luo.share.model.entity.User;
 import com.luo.share.model.entity.UserAddress;
@@ -26,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -179,7 +181,7 @@ public class UserServiceImpl implements IUserService {
 
         // 5. 查询默认收货地址
         QueryWrapper<UserAddress> addressQuery = new QueryWrapper<>();
-        addressQuery.eq("user_id", userId).eq("is_default", 1).last("LIMIT 1");
+        addressQuery.eq("user_id", userId).eq("is_default", 1).eq("is_deleted",0).last("LIMIT 1");
         UserAddress defaultAddress = userAddressMapper.selectOne(addressQuery);
 
         if (defaultAddress != null) {
@@ -241,5 +243,65 @@ public class UserServiceImpl implements IUserService {
                 userAddressMapper.updateById(address);
             }
         }
+    }
+
+    @Override
+    public List<UserAddress> getAddressList(Long userId) {
+        QueryWrapper<UserAddress> query = new QueryWrapper<>();
+        // 按照是否默认降序，创建时间降序排列
+        query.eq("user_id", userId).orderByDesc("is_default", "create_time").eq("is_deleted", 0);
+        return userAddressMapper.selectList(query);
+    }
+
+    @Override
+    public void addAddress(AddressAddDTO dto) {
+        // 如果新增的地址被勾选为默认，需要先把之前的默认地址取消
+        if (dto.getIsDefault() != null && dto.getIsDefault() == 1) {
+            clearDefaultAddress(dto.getUserId());
+        }
+
+        UserAddress address = new UserAddress();
+        address.setUserId(dto.getUserId());
+        address.setReceiverName(dto.getReceiverName());
+        address.setReceiverPhone(dto.getReceiverPhone());
+        address.setProvince(dto.getProvince());
+        address.setCity(dto.getCity());
+        address.setDistrict(dto.getDistrict());
+        address.setDetailAddress(dto.getDetailAddress());
+        address.setIsDefault(dto.getIsDefault() != null ? dto.getIsDefault() : 0);
+
+        userAddressMapper.insert(address);
+    }
+
+    @Override
+    public void setDefaultAddress(Long userId, Long addressId) {
+        // 1. 先把该用户所有的地址取消默认
+        clearDefaultAddress(userId);
+
+        // 2. 将指定的地址设为默认
+        UserAddress address = new UserAddress();
+        address.setId(addressId);
+        address.setIsDefault(1);
+        userAddressMapper.updateById(address);
+    }
+
+    private void clearDefaultAddress(Long userId) {
+        UserAddress updateObj = new UserAddress();
+        updateObj.setIsDefault(0);
+        QueryWrapper<UserAddress> query = new QueryWrapper<>();
+        query.eq("user_id", userId).eq("is_default", 1);
+        userAddressMapper.update(updateObj, query);
+    }
+
+    @Override
+    public void deleteAddress(Long userId, Long addressId) {
+        UserAddress updateObj = new UserAddress();
+        updateObj.setIsDeleted(1);
+        updateObj.setIsDefault(0);
+
+        QueryWrapper<UserAddress> query = new QueryWrapper<>();
+        query.eq("id", addressId).eq("user_id", userId);
+
+        userAddressMapper.update(updateObj, query);
     }
 }

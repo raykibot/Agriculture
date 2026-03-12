@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.luo.share.mapper.OrderMapper">
+
+    <insert id="insertOrder" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO orders (
+            buyer_id, machinery_id, owner_id, address_id,
+            rent_days, lease_start_time, lease_end_time,
+            total_amount, deposit_amount, remark,
+            status, tracking_no, create_time
+        ) VALUES (
+                     #{buyerId}, #{machineryId}, #{ownerId}, #{addressId},
+                     #{rentDays}, #{leaseStartTime}, #{leaseEndTime},
+                     #{totalAmount}, #{depositAmount}, #{remark},
+                     #{status}, #{trackingNo}, #{createTime}
+                 )
+    </insert>
+
+    <select id="selectByTrackingNo" resultType="com.luo.share.model.entity.Order">
+        SELECT * FROM orders WHERE tracking_no = #{trackingNo}
+    </select>
+
+    <update id="updateOrderStatus">
+        UPDATE orders SET status = #{status} WHERE tracking_no = #{trackingNo}
+    </update>
+
+</mapper>
