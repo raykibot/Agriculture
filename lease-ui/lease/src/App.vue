@@ -99,7 +99,6 @@ const handleUserIconClick = () => {
           </RouterLink>
           
           <RouterLink to="/publish">我要出租</RouterLink>
-          <a href="#service">服务流程</a>
         </nav>
 
         <div class="nav-actions">

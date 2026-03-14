@@ -26,3 +26,27 @@ export const getMachineryDetailAPI = (id) => {
   })
 }
 
+// 动态获取分类
+export const getCategoriesAPI = () => {
+  return request.get('/api/machinery/categories')
+}
+
+// 提交发布表单
+export const publishMachineryAPI = (data) => {
+  return request.post('/api/machinery/publish', data)
+}
+
+// 上传图片 (必须使用 FormData)
+export const uploadImageAPI = (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/api/file/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+// 获取我发布的农机
+export const getMyPublishedMachineryAPI = (userId) => {
+  return request.get('/api/machinery/my-published', { params: { userId } })
+}
+

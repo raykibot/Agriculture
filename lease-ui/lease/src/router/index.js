@@ -50,7 +50,7 @@ const router = createRouter({
       path: '/publish',
       name: 'publish',
       component: PublishView,
-      meta: { requiresAuth: true } 
+      meta: { requiresAuth: true }
     },
     {
       path: '/machinery/:id', // 注意这个 :id 是动态参数
@@ -61,6 +61,11 @@ const router = createRouter({
       path: '/confirm-order',
       name: 'confirmOrder',
       component: () => import('../views/ConfirmOrderView.vue')
+    },
+    {
+      path: '/order-tracking',
+      name: 'orderTracking',
+      component: () => import('../views/OrderTrackingView.vue')
     },
   ],
 })

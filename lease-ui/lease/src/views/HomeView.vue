@@ -22,7 +22,13 @@ onMounted(() => {
 
 // 处理图片字符串 (强制使用你的 800*800 demo.jpg)
 const getFirstImage = (imagesStr) => {
-  return 'http://localhost:9191/images/demo.png'
+  if (!imagesStr) {
+    // 兜底机制：如果数据库里没有图片，给一张高级灰的占位图防止页面错乱
+    return 'https://via.placeholder.com/800x800?text=暂无实拍图'
+  }
+  // 后端传过来的是类似 "https://oss...1.jpg,https://oss...2.jpg"
+  // 我们用逗号切开变成数组，只取第 0 个元素（第一张主图）展示在首页
+  return imagesStr.split(',')[0]
 }
 
 // 跳转到详情页

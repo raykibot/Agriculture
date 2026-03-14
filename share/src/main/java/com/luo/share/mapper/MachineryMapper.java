@@ -2,6 +2,7 @@ package com.luo.share.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.luo.share.model.entity.Category;
 import com.luo.share.model.entity.Machinery;
 import com.luo.share.model.vo.MachineryVO;
 import org.apache.ibatis.annotations.Mapper;
@@ -43,4 +44,14 @@ public interface MachineryMapper extends BaseMapper<MachineryVO> {
      * 释放机器库存：超时或取消时调用
      */
     int releaseMachineryStock(@Param("id") Long id);
+
+
+    void insertMachinery(Machinery machinery);
+
+
+    List<Category> selectAllCategories();
+
+
+    // 获取我发布的农机列表
+    List<MachineryVO> selectMyPublishedMachinery(@Param("ownerId") Long ownerId);
 }

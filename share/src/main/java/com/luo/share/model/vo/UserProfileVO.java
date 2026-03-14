@@ -4,6 +4,7 @@ import lombok.Data;
 
 @Data
 public class UserProfileVO {
+    private Long id;
     private String username;
     private String phone;         // 脱敏后的手机号
     private String realName;      // 脱敏后的真实姓名 (如: *建国)

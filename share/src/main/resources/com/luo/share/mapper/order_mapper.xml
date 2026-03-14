@@ -4,25 +4,64 @@
 <mapper namespace="com.luo.share.mapper.OrderMapper">
 
     <insert id="insertOrder" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO orders (
-            buyer_id, machinery_id, owner_id, address_id,
-            rent_days, lease_start_time, lease_end_time,
-            total_amount, deposit_amount, remark,
-            status, tracking_no, create_time
-        ) VALUES (
-                     #{buyerId}, #{machineryId}, #{ownerId}, #{addressId},
-                     #{rentDays}, #{leaseStartTime}, #{leaseEndTime},
-                     #{totalAmount}, #{depositAmount}, #{remark},
-                     #{status}, #{trackingNo}, #{createTime}
-                 )
+        INSERT INTO orders (buyer_id, machinery_id, owner_id, address_id,
+                            rent_days, lease_start_time, lease_end_time,
+                            total_amount, deposit_amount, remark,
+                            status, tracking_no, create_time)
+        VALUES (#{buyerId}, #{machineryId}, #{ownerId}, #{addressId},
+                #{rentDays}, #{leaseStartTime}, #{leaseEndTime},
+                #{totalAmount}, #{depositAmount}, #{remark},
+                #{status}, #{trackingNo}, #{createTime})
     </insert>
 
     <select id="selectByTrackingNo" resultType="com.luo.share.model.entity.Order">
-        SELECT * FROM orders WHERE tracking_no = #{trackingNo}
+        SELECT *
+        FROM orders
+        WHERE tracking_no = #{trackingNo}
     </select>
 
     <update id="updateOrderStatus">
-        UPDATE orders SET status = #{status} WHERE tracking_no = #{trackingNo}
+        UPDATE orders
+        SET status = #{status}
+        WHERE tracking_no = #{trackingNo}
     </update>
 
+    <select id="selectUserOrders" resultType="com.luo.share.model.vo.OrderVO">
+        SELECT
+        o.tracking_no AS trackingNo,
+        o.status AS status,
+        o.lease_start_time AS leaseStartTime,
+        o.rent_days AS rentDays,
+        o.total_amount AS totalAmount,
+        m.name AS machineName,
+        m.images AS machineImage,
+        ub.username AS buyerName,
+        uo.username AS ownerName
+        FROM orders o
+        LEFT JOIN machinery m ON o.machinery_id = m.id
+        LEFT JOIN users ub ON o.buyer_id = ub.id
+        LEFT JOIN users uo ON o.owner_id = uo.id
+        <where>
+            <if test="role == 'rented'">
+                o.buyer_id = #{userId}
+            </if>
+            <if test="role == 'leased'">
+                o.owner_id = #{userId}
+            </if>
+
+            <if test="statusGroup == 'unpaid'">
+                AND o.status = 0
+            </if>
+            <if test="statusGroup == 'pending_shipment'">
+                AND o.status = 1
+            </if>
+            <if test="statusGroup == 'ongoing'">
+                AND o.status = 2
+            </if>
+            <if test="statusGroup == 'completed'">
+                AND o.status = 3
+            </if>
+        </where>
+        ORDER BY o.create_time DESC
+    </select>
 </mapper>

@@ -93,3 +93,13 @@ export const setDefaultAddressAPI = (userId, addressId) => {
 export const deleteAddressAPI = (userId, addressId) => {
   return request({ url: '/api/user/address/delete', method: 'post', params: { userId, addressId } })
 }
+
+// 获取真实联系人列表
+export const getContactListAPI = (userId) => {
+  return request.get('/api/chat/contacts', { params: { userId } })
+}
+
+// 获取单用户基本信息
+export const getUserBasicInfoAPI = (userId) => {
+  return request.get('/api/chat/basicInfo', { params: { userId } })
+}

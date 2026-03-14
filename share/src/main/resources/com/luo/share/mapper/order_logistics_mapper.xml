@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.luo.share.mapper.OrderLogisticsMapper">
+
+    <insert id="insertLogistics">
+        INSERT INTO order_logistics (order_no, description, create_time)
+        VALUES (#{orderNo}, #{description}, #{createTime})
+    </insert>
+
+    <select id="selectByOrderNo" resultType="com.luo.share.model.entity.OrderLogistics">
+        SELECT * FROM order_logistics
+        WHERE order_no = #{orderNo}
+        ORDER BY create_time DESC
+    </select>
+
+</mapper>

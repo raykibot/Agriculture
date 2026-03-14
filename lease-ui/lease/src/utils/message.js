@@ -1,32 +1,29 @@
-// src/utils/message.js
-import { render, createVNode } from 'vue'
-import MessageToast from '../components/MessageToast.vue'
+import { createVNode, render } from 'vue'
+import MessageComponent from '@/components/Message/Message.vue'
 
-// 创建一个挂载点
-const mountNode = document.createElement('div')
-document.body.appendChild(mountNode)
+/**
+ * 极简全局提示方法
+ * @param {String} message 提示内容
+ * @param {String} type 类型: 'success' | 'error' | 'warning' | 'info'
+ * @param {Number} duration 停留时间 (毫秒)
+ */
+export const showMessage = (message, type = 'info', duration = 2500) => {
+  // 1. 创建一个挂载用的容器
+  const container = document.createElement('div')
+  document.body.appendChild(container)
 
-let currentVNode = null
-
-export const showMessage = (message, type = 'info', duration = 3000) => {
-  // 如果当前已经有弹窗，先卸载掉，避免重叠
-  if (currentVNode) {
-    render(null, mountNode)
-  }
-
-  // 创建 VNode (虚拟节点)，将参数传给组件的 props
-  const vnode = createVNode(MessageToast, {
+  // 2. 将 Vue 组件编译为虚拟 DOM (VNode)
+  const vnode = createVNode(MessageComponent, {
     message,
     type,
     duration,
-    onClose: () => {
-      // 动画结束后销毁组件
-      render(null, mountNode)
-      currentVNode = null
+    onDestroy: () => {
+      // 动画结束后，卸载虚拟 DOM 并移除真实 DOM 节点
+      render(null, container)
+      container.remove()
     }
   })
 
-  // 将 VNode 渲染到真实的 DOM 节点上
-  render(vnode, mountNode)
-  currentVNode = vnode
+  // 3. 将虚拟 DOM 渲染到物理容器中
+  render(vnode, container)
 }

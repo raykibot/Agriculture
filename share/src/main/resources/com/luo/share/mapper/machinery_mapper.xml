@@ -93,4 +93,38 @@
             locked_stock = locked_stock - 1
         WHERE id = #{id} AND locked_stock > 0
     </update>
+
+    <insert id="insertMachinery" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO machinery (owner_id, category_id, name, brand, model, description, price, deposit, images, status, stock, locked_stock, avg_rating, parameters, create_time)
+        VALUES (#{ownerId}, #{categoryId}, #{name}, #{brand}, #{model}, #{description}, #{price}, #{deposit}, #{images}, #{status}, #{stock}, #{lockedStock}, #{avgRating}, #{parameters}, #{createTime})
+    </insert>
+
+
+
+    <select id="selectAllCategories" resultType="com.luo.share.model.entity.Category">
+        SELECT id, name, create_time
+        FROM categories
+        ORDER BY sort_order ASC, id ASC
+    </select>
+
+    <select id="selectMyPublishedMachinery" resultType="com.luo.share.model.vo.MachineryVO">
+        SELECT
+            id,
+            name,
+            brand,
+            model,
+            category_id AS categoryId,
+            price,
+            deposit,
+            description,
+            images,
+            status,
+            stock,
+            locked_stock AS lockedStock,
+            avg_rating AS avgRating,
+            create_time AS createTime
+        FROM machinery
+        WHERE owner_id = #{ownerId}
+        ORDER BY create_time DESC
+    </select>
 </mapper>

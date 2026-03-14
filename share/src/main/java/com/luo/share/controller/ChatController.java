@@ -2,7 +2,9 @@ package com.luo.share.controller;
 
 import com.luo.share.common.api.Result;
 import com.luo.share.mapper.ChatMessageMapper;
+import com.luo.share.mapper.UserMapper;
 import com.luo.share.model.entity.ChatMessage;
+import com.luo.share.model.vo.ContactVO;
 import com.luo.share.websocket.ChatWebSocketServer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,9 @@ public class ChatController {
 
     @Autowired
     private ChatMessageMapper chatMessageMapper;
+
+    @Autowired
+    private UserMapper userMapper;
 
     /**
      * 1. 获取两个用户之间的历史聊天记录
@@ -69,5 +74,24 @@ public class ChatController {
     public Result<Integer> getUnreadCount(@RequestParam Long userId) {
         int count = chatMessageMapper.countTotalUnread(userId);
         return Result.success(count);
+    }
+
+    @GetMapping("/contacts")
+    public Result<List<ContactVO>> getContacts(@RequestParam("userId") Long userId) {
+        // 这里直接调用 mapper，你也可以写在 Service 层里
+        List<ContactVO> list = userMapper.selectChatContacts(userId);
+        return Result.success(list);
+    }
+
+    /**
+     * 获取单个用户的基本信息 (用于发起新聊天)
+     */
+    @GetMapping("/basicInfo")
+    public Result<ContactVO> getUserBasicInfo(@RequestParam("userId") Long userId) {
+        ContactVO contact = userMapper.selectUserBasicInfo(userId);
+        if (contact != null) {
+            contact.setRole("机主"); // 默认给个身份标识
+        }
+        return Result.success(contact);
     }
 }

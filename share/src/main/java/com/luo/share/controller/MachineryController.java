@@ -2,6 +2,8 @@ package com.luo.share.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.luo.share.common.api.Result;
+import com.luo.share.model.dto.MachineryAddDTO;
+import com.luo.share.model.entity.Category;
 import com.luo.share.model.vo.MachineryVO;
 import com.luo.share.service.IMachineryService;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.crypto.Mac;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/machinery")
@@ -53,5 +56,29 @@ public class MachineryController {
         return Result.success(machinery);
     }
 
+    @GetMapping("/categories")
+    public Result<List<Category>> getCategories() {
+        List<Category> list = machineryService.getCategory();
+        return Result.success(list);
+    }
+
+    /**
+     * 发布闲置农机
+     */
+    @PostMapping("/publish")
+    public Result<String> publishMachinery(@RequestBody MachineryAddDTO dto) {
+        machineryService.publishMachinery(dto);
+        return Result.success("农机发布成功");
+    }
+
+
+    /**
+     * 获取当前用户发布的农机
+     */
+    @GetMapping("/my-published")
+    public Result<List<MachineryVO>> getMyPublishedMachinery(@RequestParam("userId") Long userId) {
+        List<MachineryVO> list = machineryService.getMyPublishedMachinery(userId);
+        return Result.success(list);
+    }
 
 }

@@ -1,19 +1,16 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { getChatHistoryAPI, getBatchOnlineStatusAPI, markAsReadAPI } from '@/api/user' 
+import { useRouter, useRoute } from 'vue-router'
+// 🌟 引入刚写好的 getUserBasicInfoAPI
+import { getChatHistoryAPI, getBatchOnlineStatusAPI, markAsReadAPI, getContactListAPI, getUserBasicInfoAPI } from '@/api/user' 
+import { showMessage } from '@/utils/message'
 
 const router = useRouter()
+const route = useRoute() // 引入路由对象，用来获取 URL 里的 targetId
 
 const currentUser = ref({ userId: null, username: '未登录', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Me' })
 let ws = null 
 let statusTimer = null 
-
-// 模拟全站用户字典
-const allUsers = [
-  { id: 1, name: '农民大叔 (用户1)', role: '农户', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix', lastMessage: '', time: '', unread: 0, isOnline: false },
-  { id: 2, name: '农机主老板 (用户2)', role: '农机主', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Toby', lastMessage: '', time: '', unread: 0, isOnline: false }
-]
 
 const contacts = ref([])
 const activeContact = ref(null)
@@ -23,11 +20,74 @@ const chatHistories = ref({})
 const inputText = ref('')
 const chatBoxRef = ref(null)
 
-// ================= 核心 1：拉取历史记录 =================
+// ================= 核心 0：拉取真实联系人列表 (包含陌生人会话处理) =================
+const fetchContacts = async () => {
+  try {
+    const res = await getContactListAPI(currentUser.value.userId)
+    let list = res.data.map(c => ({
+      id: c.id,
+      name: c.name || '未知用户', 
+      role: c.role || '用户',
+      avatar: c.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${c.id}`, 
+      lastMessage: '',
+      time: '',
+      unread: 0,
+      isOnline: false
+    }))
+
+    // 🌟 核心拦截：检查是否是从详情页“联系机主”跳转过来的
+    const targetId = route.query.targetId ? Number(route.query.targetId) : null
+    
+    if (targetId && targetId !== currentUser.value.userId) {
+      // 找找看这个机主是不是已经在我的聊天列表里了
+      let existContact = list.find(c => c.id === targetId)
+      
+      if (!existContact) {
+        // 如果不在列表里（说明是第一次聊天），去后台查他的基本信息
+        const userRes = await getUserBasicInfoAPI(targetId)
+        if (userRes.code === 200 && userRes.data) {
+          const newContact = {
+            id: userRes.data.id,
+            name: userRes.data.name || '未知机主',
+            role: userRes.data.role || '机主',
+            avatar: userRes.data.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userRes.data.id}`,
+            lastMessage: '正在发起会话...',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            unread: 0,
+            isOnline: false
+          }
+          // 把他强行塞到列表的最前面！
+          list.unshift(newContact)
+          existContact = newContact
+        }
+      }
+      // 强行选中这个机主
+      activeContact.value = existContact
+    } else if (list.length > 0) {
+      // 如果没有带 targetId，就默认选中第一个人
+      activeContact.value = list[0]
+    }
+
+    contacts.value = list
+
+    // 如果当前有选中的人，拉取他的聊天记录
+    if (activeContact.value) {
+      fetchChatHistory(activeContact.value.id) 
+      markMessagesAsRead(activeContact.value.id) 
+    }
+
+    // 批量查在线状态
+    fetchOnlineStatus()
+  } catch (error) {
+    console.error('获取联系人列表失败:', error)
+  }
+}
+
+// ================= 下方逻辑保持与上一版完全一致 =================
+
 const fetchChatHistory = async (targetUserId) => {
   try {
     const res = await getChatHistoryAPI(currentUser.value.userId, targetUserId)
-    
     chatHistories.value[targetUserId] = res.data.map(msg => {
       const timeStr = new Date(msg.createTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       return {
@@ -44,14 +104,12 @@ const fetchChatHistory = async (targetUserId) => {
   }
 }
 
-// ================= 核心 2：批量获取在线状态 =================
 const fetchOnlineStatus = async () => {
   if (contacts.value.length === 0) return
   try {
     const userIds = contacts.value.map(c => c.id)
     const res = await getBatchOnlineStatusAPI(userIds)
     const statusMap = res.data
-    
     contacts.value.forEach(contact => {
       contact.isOnline = statusMap[contact.id] || false
     })
@@ -60,33 +118,23 @@ const fetchOnlineStatus = async () => {
   }
 }
 
-// ================= 核心 3：标记消息为已读 (附带回执机制) =================
 const markMessagesAsRead = async (targetUserId) => {
   try {
-    // 1. HTTP 告诉后端数据库修改状态
     await markAsReadAPI(targetUserId, currentUser.value.userId)
-    
-    // 2. 清空本地小红点
     const contact = contacts.value.find(c => c.id === targetUserId)
     if (contact) contact.unread = 0
-
-    // 3. 【新增】：通过 WebSocket 悄悄给对方发一条“已读回执信号”
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 2, // 2 代表回执信号
-        toUserId: targetUserId
-      }))
+      ws.send(JSON.stringify({ type: 2, toUserId: targetUserId }))
     }
   } catch (error) {
     console.error('标记已读失败:', error)
   }
 }
 
-// ================= WebSocket 逻辑 =================
 const initWebSocket = () => {
   const userInfoStr = localStorage.getItem('user_info')
   if (!userInfoStr) {
-    alert('请先登录！')
+    showMessage('请先登录后再进行操作', 'warning')
     router.push('/login')
     return
   }
@@ -95,82 +143,59 @@ const initWebSocket = () => {
   currentUser.value.userId = userInfo.userId
   currentUser.value.username = userInfo.username
   
-  contacts.value = allUsers.filter(u => u.id !== currentUser.value.userId)
-  
-  if (contacts.value.length > 0) {
-    activeContact.value = contacts.value[0]
-    fetchChatHistory(activeContact.value.id) 
-    markMessagesAsRead(activeContact.value.id) 
-  }
+  fetchContacts()
 
-  fetchOnlineStatus()
-  statusTimer = setInterval(() => {
-    fetchOnlineStatus()
-  }, 10000)
-
+  statusTimer = setInterval(() => { fetchOnlineStatus() }, 10000)
   const wsUrl = `ws://localhost:9191/ws/chat/${currentUser.value.userId}`
   ws = new WebSocket(wsUrl)
 
   ws.onmessage = (event) => {
     const msgObj = JSON.parse(event.data)
     
-    // 【核心改造】：判断收到的是聊天消息，还是已读回执
     if (msgObj.type === 2) {
-      // 收到了已读回执 (代表对方 msgObj.fromUserId 看了我发的消息)
       const readerId = msgObj.fromUserId;
-      // 把我发给 readerId 的所有消息在本地强行置为“已读” (绿色)
       if (chatHistories.value[readerId]) {
         chatHistories.value[readerId].forEach(msg => {
-          if (msg.senderId === currentUser.value.userId) {
-            msg.isRead = 1;
-          }
+          if (msg.senderId === currentUser.value.userId) msg.isRead = 1;
         })
       }
-      return; // 回执处理完毕，直接结束
+      return; 
     }
 
-    // ========== 下面是原本处理正常聊天消息 (type = 1) 的逻辑 ==========
     const senderId = msgObj.fromUserId
-
-    if (!chatHistories.value[senderId]) {
-      chatHistories.value[senderId] = []
-    }
-    
-    chatHistories.value[senderId].push({
-      id: msgObj.id || Date.now(),
-      senderId: senderId,
-      text: msgObj.content,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isRead: 0 
-    })
-
     const contact = contacts.value.find(c => c.id === senderId)
-    if (contact) {
+    if (!contact) {
+      fetchContacts() 
+    } else {
+      if (!chatHistories.value[senderId]) chatHistories.value[senderId] = []
+      chatHistories.value[senderId].push({
+        id: msgObj.id || Date.now(),
+        senderId: senderId,
+        text: msgObj.content,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isRead: 0 
+      })
+
       contact.lastMessage = msgObj.content
       contact.time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       
       if (activeContact.value?.id === senderId) {
-        // 如果正在看这个人聊天，直接静默发已读请求（里面包含了发出回执信号）
         markMessagesAsRead(senderId)
       } else {
         contact.unread += 1
       }
+      scrollToBottom()
     }
-    
-    scrollToBottom()
   }
 }
 
-onMounted(() => {
-  initWebSocket()
-})
+onMounted(() => { initWebSocket() })
 
 onUnmounted(() => {
   if (ws) ws.close() 
   if (statusTimer) clearInterval(statusTimer) 
 })
 
-// ================= 交互逻辑 =================
 const filteredContacts = computed(() => {
   if (!searchQuery.value) return contacts.value
   return contacts.value.filter(c => c.name.includes(searchQuery.value) || c.role.includes(searchQuery.value))
@@ -180,6 +205,8 @@ const selectContact = async (contact) => {
   activeContact.value = contact
   await fetchChatHistory(contact.id)
   await markMessagesAsRead(contact.id)
+  // 清除 URL 里的 targetId，防止刷新时逻辑混淆
+  router.replace({ path: '/messages' }) 
 }
 
 const sendMessage = () => {
@@ -190,13 +217,7 @@ const sendMessage = () => {
   }
 
   const targetUserId = activeContact.value.id
-  
-  // 发送时指定 type = 1
-  const payload = {
-    type: 1, 
-    toUserId: targetUserId,
-    content: inputText.value
-  }
+  const payload = { type: 1, toUserId: targetUserId, content: inputText.value }
   ws.send(JSON.stringify(payload))
 
   const newMessage = {
@@ -207,9 +228,7 @@ const sendMessage = () => {
     isRead: 0 
   }
 
-  if (!chatHistories.value[targetUserId]) {
-    chatHistories.value[targetUserId] = []
-  }
+  if (!chatHistories.value[targetUserId]) chatHistories.value[targetUserId] = []
   chatHistories.value[targetUserId].push(newMessage)
   
   activeContact.value.lastMessage = inputText.value
@@ -278,7 +297,7 @@ const scrollToBottom = async () => {
         </header>
 
         <div class="chat-history" ref="chatBoxRef">
-          <div class="date-divider">今天</div>
+          <div class="date-divider">近期</div>
           
           <div 
             v-for="msg in chatHistories[activeContact.id] || []" 
@@ -318,7 +337,7 @@ const scrollToBottom = async () => {
       <main class="chat-main empty-chat" v-else>
         <div class="empty-content">
           <div class="icon">💬</div>
-          <h3>选择一个联系人开始交流</h3>
+          <h3>暂无聊天记录</h3>
         </div>
       </main>
 
@@ -327,17 +346,13 @@ const scrollToBottom = async () => {
 </template>
 
 <style scoped>
-/* 离线状态变红/变灰 */
+/* 保持完全相同的 CSS 不变 */
 .status-dot.offline { background-color: #ef4444; }
 .avatar-status { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; background-color: #10b981; }
 .avatar-status.offline { background-color: #9ca3af; }
-
-/* 已读/未读状态样式 */
 .read-status { margin-left: 8px; font-weight: 600; font-size: 0.7rem; }
-.is-read { color: #10b981; } /* 绿色已读 */
-.un-read { color: #ef4444; } /* 红色未读 */
-
-/* 全量 CSS */
+.is-read { color: #10b981; } 
+.un-read { color: #ef4444; } 
 .messages-page-full { height: calc(100vh - 80px); width: 100%; background-color: #ffffff; overflow: hidden; }
 .chat-container-full { display: flex; width: 100%; height: 100%; }
 ::-webkit-scrollbar { width: 6px; }

@@ -152,7 +152,12 @@ const submitOrder = async () => {
     }
   } catch (error) {
     console.error('下单异常:', error)
-    showMessage('网络或系统异常，创建订单失败', 'error')
+    
+    // 🌟 核心修复：尝试从 error 对象中提取后端真实的报错信息 (兼容不同的拦截器抛出格式)
+    const errorMsg = error.message || error.msg || error.response?.data?.message || '网络或系统异常，创建订单失败'
+    
+    // 把硬编码替换成动态解析出来的错误信息
+    showMessage(errorMsg, 'error')
   } finally {
     isSubmitting.value = false
   }

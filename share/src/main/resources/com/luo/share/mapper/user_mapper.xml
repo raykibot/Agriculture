@@ -31,4 +31,29 @@ update users set real_name = #{realName},id_card = #{idCard} where id = #{id}
         select id,phone,password,username,avatar,role,create_time,update_time,is_deleted,real_name,id_card,gender,email,status from users where id = #{userId}
     </select>
 
+    <select id="selectChatContacts" resultType="com.luo.share.model.vo.ContactVO">
+        SELECT
+            u.id AS id,
+            u.username AS name,
+            u.avatar AS avatar
+        FROM users u
+        WHERE u.id IN (
+            -- 查出我发消息给谁了
+            SELECT to_user_id FROM chat_messages WHERE from_user_id = #{userId}
+            UNION
+            -- 查出谁给我发消息了
+            SELECT from_user_id FROM chat_messages WHERE to_user_id = #{userId}
+        )
+          AND u.id != #{userId} -- 排除自己
+    </select>
+
+    <select id="selectUserBasicInfo" resultType="com.luo.share.model.vo.ContactVO">
+        SELECT
+            id,
+            username AS name,
+            avatar
+        FROM users
+        WHERE id = #{userId}
+    </select>
+
 </mapper>

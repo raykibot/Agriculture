@@ -147,6 +147,7 @@ public class UserServiceImpl implements IUserService {
         }
 
         UserProfileVO vo = new UserProfileVO();
+        vo.setId(user.getId());
         vo.setUsername(user.getUsername());
 
         // 2. 手机号脱敏 (保留前3后4)

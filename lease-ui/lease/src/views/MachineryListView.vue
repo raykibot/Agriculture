@@ -9,17 +9,12 @@ const router = useRouter()
 const machineryList = ref([])
 const loading = ref(false)
 
-// 强转为数字类型，如果没有传则默认为 null 或 0
 const currentCategoryId = ref(route.query.categoryId ? Number(route.query.categoryId) : null)
 
-// 调用分页接口拉取数据
 const fetchMachineryList = async () => {
   loading.value = true
   try {
-    // 请求第1页，12条，传入当前分类 ID
     const res = await getMachineryListAPI(1, 12, currentCategoryId.value)
-    
-    // 取出分页中的记录列表
     machineryList.value = res.data.records || res.data.list || []
   } catch (error) {
     console.error('获取列表失败:', error)
@@ -28,12 +23,10 @@ const fetchMachineryList = async () => {
   }
 }
 
-// 页面挂载时拉取
 onMounted(() => {
   fetchMachineryList()
 })
 
-// 监听路由参数变化（在顶导点击其他分类时无缝刷新）
 watch(
   () => route.query.categoryId,
   (newVal) => {
@@ -42,12 +35,16 @@ watch(
   }
 )
 
-// 图片处理 (使用样板图)
+// 🌟 核心修复：真正解析阿里云的逗号分隔图片
 const getFirstImage = (imagesStr) => {
-  return 'http://localhost:9191/images/demo.jpg'
+  if (!imagesStr) {
+    // 如果数据库里连图片都没有，给一张默认占位图，防止页面错乱
+    return 'https://via.placeholder.com/400x300?text=暂无实拍图'
+  }
+  // 用逗号切开字符串，只返回第一张图的 URL
+  return imagesStr.split(',')[0]
 }
 
-// 跳转详情页
 const goToDetail = (id) => {
   router.push(`/machinery/${id}`)
 }

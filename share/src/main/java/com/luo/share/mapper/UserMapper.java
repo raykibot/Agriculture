@@ -1,8 +1,11 @@
 package com.luo.share.mapper;
 
 import com.luo.share.model.entity.User;
+import com.luo.share.model.vo.ContactVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 @Mapper
 public interface UserMapper {
@@ -19,4 +22,9 @@ public interface UserMapper {
     User selectById(Long userId);
 
     void updateById(User user);
+
+    // 获取与指定用户聊过天的联系人列表
+    List<ContactVO> selectChatContacts(@Param("userId") Long userId);
+
+    ContactVO selectUserBasicInfo(@Param("userId") Long userId);
 }

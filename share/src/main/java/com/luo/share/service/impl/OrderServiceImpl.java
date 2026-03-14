@@ -3,10 +3,13 @@ package com.luo.share.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.luo.share.config.RabbitMQConfig;
 import com.luo.share.mapper.MachineryMapper;
+import com.luo.share.mapper.OrderLogisticsMapper;
 import com.luo.share.mapper.OrderMapper;
 import com.luo.share.model.dto.OrderCreateDTO;
 import com.luo.share.model.entity.Machinery;
 import com.luo.share.model.entity.Order;
+import com.luo.share.model.entity.OrderLogistics;
+import com.luo.share.model.vo.OrderVO;
 import com.luo.share.service.IOrderService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -17,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -35,6 +39,9 @@ public class OrderServiceImpl implements IOrderService {
 
     @Autowired
     private RabbitTemplate rabbitTemplate;
+
+    @Autowired
+    private OrderLogisticsMapper orderLogisticsMapper;
 
     // 定义 Redis 库存 Key 的前缀
     private static final String STOCK_CACHE_PREFIX = "machinery:stock:";
@@ -115,5 +122,26 @@ public class OrderServiceImpl implements IOrderService {
             }
             throw new RuntimeException("订单创建失败：" + e.getMessage());
         }
+    }
+
+    @Override
+    public List<OrderVO> getUserOrders(Long userId, String role,String statusGroup) {
+        return orderMapper.selectUserOrders(userId, role,statusGroup);
+    }
+
+    @Override
+    public void shipOrder(String orderNo) {
+        // 1. 修改订单状态为 2 (租赁中/已发货)
+        int updateCount = orderMapper.updateOrderStatus(orderNo, 2);
+        if (updateCount == 0) {
+            throw new RuntimeException("发货失败，订单可能不存在或状态已改变");
+        }
+
+        // 2. 自动生成发货的物流轨迹
+        OrderLogistics logistics = new OrderLogistics();
+        logistics.setOrderNo(orderNo);
+        logistics.setDescription("机主已发货，设备正由【重型平板拖车】运往您的目的地。");
+        logistics.setCreateTime(new Date());
+        orderLogisticsMapper.insertLogistics(logistics);
     }
 }
