@@ -29,12 +29,12 @@ aliyun:
     endpoint: oss-cn-beijing.aliyuncs.com  # 替换为你的真实 endpoint
     access-key-id:   # 替换为你的真实 ID
     access-key-secret:   # 替换为你的真实 Secret
-    bucket-name: agriculture-share     # 替换为你的真实 Bucket 名称
+    bucket-name:      # 替换为你的真实 Bucket 名称
 
 # 支付宝沙箱配置
 alipay:
   app-id:
-  #
+  private-key:
   server-url: https://openapi-sandbox.dl.alipaydev.com/gateway.do
   sign-type: RSA2
   charset: UTF-8
@@ -42,12 +42,15 @@ alipay:
   # 支付成功后，支付宝引导用户浏览器跳转回你的前端页面的地址
   return-url: http://localhost:5173/profile
   # 支付宝服务器在后台悄悄通知你后端支付成功的地址 (后续讲内网穿透时再填，先随便写一个)
-  notify-url:
+  notify-url: http://x469cdb9.natappfree.cc/api/order/notify
+  alipay-public-key:
+
+
 
 
 mybatis-plus:
   mapper-locations: classpath:com/luo/share/mapper/*.xml
 
 jwt:
-  secret: agri_share_platform_secret_key_must_be_long_enough_2026 # 密钥必须够长
+  secret:  # 密钥必须够长
   expiration: 21600 # 6小时的秒数 (6 * 60 * 60)
